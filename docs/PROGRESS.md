@@ -14,18 +14,18 @@ Generated 2026-10-18 from 11 module backlogs.
 
 ## Overall
 
-**239 of 277 tracked stories complete — 86%**
+**240 of 277 tracked stories complete — 87%**
 
 ```
-███████████████████████████████████░░░░░  86%
+███████████████████████████████████░░░░░  87%
 ```
 
 | Status | Stories |
 |---|---|
-| Done | 239 |
+| Done | 240 |
 | Partial | 22 |
 | Deferred | 2 |
-| Not Started | 14 |
+| Not Started | 13 |
 | **Total tracked** | **277** |
 
 Beyond these, the backlogs list **53 P1** and **32 P2** forward-looking items.
@@ -41,7 +41,7 @@ and are deliberately excluded from the counts above.
 | 01 | [Foundation Agent](plan/01-FOUNDATION-AGENT-BACKLOG.md) | 43 | 2 | 0 | 2 | 47 | `████████████████░░` 91% |
 | 02 | [Identity Agent](plan/02-IDENTITY-AGENT-BACKLOG.md) | 20 | 0 | 0 | 1 | 21 | `█████████████████░` 95% |
 | 03 | [Integration Agent](plan/03-INTEGRATION-AGENT-BACKLOG.md) | 27 | 3 | 0 | 0 | 30 | `████████████████░░` 90% |
-| 04 | [Access Agent](plan/04-ACCESS-AGENT-BACKLOG.md) | 31 | 1 | 0 | 1 | 33 | `█████████████████░` 94% |
+| 04 | [Access Agent](plan/04-ACCESS-AGENT-BACKLOG.md) | 32 | 1 | 0 | 0 | 33 | `█████████████████░` 97% |
 | 05 | [Runtime Agent](plan/05-RUNTIME-AGENT-BACKLOG.md) | 13 | 0 | 0 | 0 | 13 | `██████████████████` 100% |
 | 06 | [Risk Agent](plan/06-RISK-AGENT-BACKLOG.md) | 14 | 2 | 0 | 0 | 16 | `████████████████░░` 88% |
 | 07 | [Compliance Agent](plan/07-COMPLIANCE-AGENT-BACKLOG.md) | 17 | 0 | 0 | 0 | 17 | `██████████████████` 100% |
@@ -183,7 +183,7 @@ and are deliberately excluded from the counts above.
 
 **Module:** Effective Access & Access Governance (the CAN side, plus policy)  
 **Backlog status:** DORMANT — do not start until the user says "Run Access Agent"  
-**Stories:** 31 done · 1 partial · 0 deferred · 1 not started (33 tracked) · 4 P1 / 3 P2 ahead
+**Stories:** 32 done · 1 partial · 0 deferred · 0 not started (33 tracked) · 4 P1 / 3 P2 ahead
 
 | Story | Title | Status |
 |---|---|---|
@@ -208,8 +208,8 @@ and are deliberately excluded from the counts above.
 | ACCESS-P0-18 | Self-service request catalog and request policies | Done — 2026-09-26, migration 0092 (packages with ACCESS-P0-20) |
 | ACCESS-P0-19 | Approval engine: multi-stage chains, approver scope, no self-approval | Done — 2026-09-26, migration 0093 (named groups deferred) |
 | ACCESS-P0-20 | Access packages | Done — 2026-09-26, migration 0094 (provisioning by INTEGRATION-P0-13; extension and package certification later). 2026-10-13: birthright, turned on by two administrators (0151); a mover's birthright packages they no longer qualify for go to a 14-day review, then are removed unless kept (0153, WID-H09) |
-| ACCESS-P0-21 | Business and IT roles | Partial — 2026-10-18 (owner decision: a kind of access package; migration 0203): business and IT roles with owners, risk and requestability; a role includes other roles and packages (no loops), granted together on assignment; simulation of adding or removing one for an identity. SoD impact in the simulation waits on entitlement conflict rules (ACCESS-P0-22) |
-| ACCESS-P0-22 | Preventive SoD on entitlement combinations | Not Started — 2026-09-26, WonderID |
+| ACCESS-P0-21 | Business and IT roles | Done — 2026-10-18 (owner decision: a kind of access package; migration 0203): business and IT roles with owners, risk and requestability; a role includes other roles and packages (no loops), granted together on assignment; simulation of adding or removing one for an identity. the simulation shows the separation-of-duties conflicts adding a role would create (ACCESS-P0-22 part 1, same day) |
+| ACCESS-P0-22 | Preventive SoD on entitlement combinations | Partial — 2026-10-18 part 1 (no migration): conflict rules over entitlements on identity policies (versioned with the policy), BLOCK or WARN, checked at catalog request, package/role request, every assignment (direct, approved request, birthright, rule) and at each approval; a warning never auto-approves and is recorded on the request; detective list of identities holding both; role simulation shows conflicts. Left: REQUIRE_EXCEPTION and REQUIRE_ADDITIONAL_APPROVAL, exceptions with owner, expiry and compensating control |
 | ACCESS-P0-23 | Delegations | Done — 2026-10-14: approval (0176), request (0177) and administration (0178) delegation. 2026-10-17 (0200, owner decisions): person→agent and agent→agent, approved by an owner of the agent, enforced at the Runtime Gateway (DELEGATION_REQUIRED → approval) |
 | ACCESS-P0-24 | Access ledger and provenance | Done — 2026-10-10, migration 0114 (role, lifecycle, emergency and legacy sources wait for those features; connectors' entitlements reach it once they are reconciled) |
 | ACCESS-P0-25 | Imported access classification and drift findings | Done — 2026-10-11: migration 0120 (isolation SQL 12/12); baseline per application; legacy / authorized / unproven / rogue in the ledger and on the account page; one Risk finding per rogue access |

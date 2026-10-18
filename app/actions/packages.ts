@@ -214,7 +214,7 @@ export async function removeIncludeAction(packageId: string, includedId: string,
 export type SimulationState =
   | { status: "idle" }
   | { status: "error"; message: string }
-  | { status: "done"; action: "add" | "remove"; changes: string[]; unchanged: string[]; risk: string; eligibility: string | null; stale: boolean };
+  | { status: "done"; action: "add" | "remove"; changes: string[]; unchanged: string[]; risk: string; eligibility: string | null; stale: boolean; sod: { policyName: string; blocking: boolean; left: string[]; right: string[] }[] };
 
 export async function simulateAction(packageId: string, _prev: SimulationState, formData: FormData): Promise<SimulationState> {
   const ctx = await requirePermission("access.manage");
@@ -229,6 +229,7 @@ export async function simulateAction(packageId: string, _prev: SimulationState, 
       risk: r.risk,
       eligibility: action === "add" && !r.eligible.eligible ? r.eligible.reasons.join("; ") : action === "add" && r.holds ? "They already hold it." : null,
       stale: !r.ledgerRefreshed,
+      sod: r.sod,
     };
   } catch (err) {
     const e = err as { message?: string };

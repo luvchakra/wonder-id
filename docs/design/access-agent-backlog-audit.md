@@ -4615,3 +4615,52 @@ approvals, assignment, provisioning, expiry and owner reviews are reused.
 assignments, as resource changes already do. Two concurrent includes that
 together form a loop are not prevented (each trigger sees the other's row
 only after commit); recorded, not built.
+
+## 2026-10-18 — ACCESS-P0-22 part 1: access that must not be combined; ACCESS-P0-21 Done
+
+Top item of the goal-alignment review of 18 Oct (main @ `e1022d9`): the
+largest open governance gap for every identity type.
+
+**Design (no migration):** a rule is an `rbac` rule on an `identity` policy
+with condition `{ conflictingAccess: { left: entitlementId[], right:
+entitlementId[] } }`, beside the process-SoD rules (`conflictingActions`). It
+gets the policy's status, numbered versions and change history
+(ACCESS-P0-35); only an active policy enforces. The policy's action `block`
+refuses; any other action warns.
+
+**Built:**
+- `accessSodRules.ts` (pure): reading rules, side validation (ids, both
+  sides, no entitlement on both, at most 50 each), `findAccessConflicts`
+  (only conflicts the new access takes part in), `heldConflicts`,
+  `conflictOutcome` (block wins).
+- `accessSod.ts`: `checkAccessCombination` (service role, tenant filtered;
+  what is held = grants not revoked and not missing at the source, pending
+  included; audited `access.sod_access_conflict`; block → 409
+  `SOD_CONFLICT` naming the entitlements), `previewAccessConflicts` (no
+  write, for the simulation), `addAccessConflictRule` (identity policy only,
+  entitlements in the tenant, through `addPolicyRule`, so versioned and
+  audited), `listHeldAccessConflicts` (detective, at most 20,000 grants,
+  says when capped).
+- Checked at: catalog requests (`submitAccessRequest`; a warning makes the
+  request pending, never auto-approved, and adds a `sod` check), package and
+  role requests (`requestPackage`), every assignment (`createAssignment`:
+  approved request, direct, birthright — skipped and audited — and identity
+  rules), and every approval step (`decideApprovalStep`, before the step is
+  recorded; reject stays possible).
+- Role simulation (ACCESS-P0-21) lists the conflicts adding the role would
+  create. With that, ACCESS-P0-21 is Done against its backlog criteria.
+- UI: SoD Rules gets "Access that must not be combined" and Actions › New
+  access rule… (identity policy, two entitlement lists); SoD Violations gets
+  "Access held together now".
+
+**Verified:** `accessSodRules.test.ts` (5) with `modules/access-governance`
+and `tests/architecture`: 44 files, 394 passed. Typecheck and eslint clean.
+E2E `access-sod.spec.ts` (warning → pending with the conflict recorded,
+unrelated access unaffected; block refuses the request and the approval;
+pages; another organization sees nothing) plus `sod`, `request-catalog`,
+`request-baskets` and `access-packages` run on Vercel before merge.
+
+**Left (part 2):** REQUIRE_EXCEPTION and REQUIRE_ADDITIONAL_APPROVAL;
+exceptions with owner, expiry and compensating control; ACCESS-P0-36's
+violation workflow and import guardrail. Rule targets (policy targets) are
+not applied to access rules: a rule covers every identity.

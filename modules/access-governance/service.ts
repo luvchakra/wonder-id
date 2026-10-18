@@ -222,3 +222,7 @@ export { SETTABLE as CLASSIFICATION_SETTABLE, CLASSIFICATION_TRIGGERS } from "./
 
 export { resolvePolicy as resolveRequestPolicy } from "./requestRules";
 export { entitlementRequestability } from "./requestRules";
+
+// ACCESS-P0-22 part 1: separation of duties over access combinations.
+export { addAccessConflictRule, listAccessConflictRules, listHeldAccessConflicts, checkAccessCombination, ACCESS_CONFLICT_ACTION, type HeldAccessConflict } from "./accessSod";
+export type { AccessConflictRule } from "./accessSodRules";

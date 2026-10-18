@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/requirePermission";
 import { listTenantMembersWithRoles } from "@/lib/rbac/roles";
 import { listAuditLogs } from "@/modules/operations/service";
-import { SOD_CONFLICT_ACTION, listSoDRules, toSoDConflict } from "@/modules/access-governance/service";
+import { SOD_CONFLICT_ACTION, listHeldAccessConflicts, listSoDRules, toSoDConflict } from "@/modules/access-governance/service";
 import { listAgents } from "@/modules/agent-identity/service";
 import { ApiError } from "@/lib/shared/types/foundation";
 import { Badge, Card, EmptyState, LinkButton, TableContainer, Td, Th, Thead, Tr } from "@/modules/ui";
@@ -12,6 +12,8 @@ import { Badge, Card, EmptyState, LinkButton, TableContainer, Td, Th, Thead, Tr 
 // rule caught, refused or allowed and recorded, read from the audit trail
 // `enforceSoD()` writes (so it needs audit.read). Newest first, a page at a
 // time (keyset on the audit time, §15).
+// ACCESS-P0-22: above them, the identities that hold access an active rule
+// says must not be combined, read from their current access.
 
 const PAGE_SIZE = 50;
 const fmt = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
@@ -28,11 +30,12 @@ export default async function SoDConflictsPage({ searchParams }: { searchParams:
   const { before } = await searchParams;
   const cursor = before && !Number.isNaN(Date.parse(before)) ? before : null;
   const canReadPolicies = ctx.permissions.includes("policy.read");
-  const [page, members, agents, rules] = await Promise.all([
+  const [page, members, agents, rules, held] = await Promise.all([
     listAuditLogs(tenantId, { action: SOD_CONFLICT_ACTION }, cursor, PAGE_SIZE),
     listTenantMembersWithRoles(tenantId),
     listAgents(tenantId),
     canReadPolicies ? listSoDRules(tenantId) : Promise.resolve([]),
+    canReadPolicies && !cursor ? listHeldAccessConflicts(tenantId) : Promise.resolve(null),
   ]);
   const conflicts = page.entries.map(toSoDConflict);
   const person = new Map(members.map((m) => [m.userId, m.displayName || m.email]));
@@ -43,8 +46,50 @@ export default async function SoDConflictsPage({ searchParams }: { searchParams:
     <div className="space-y-5">
       <div>
         <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-foreground">SoD Conflicts</h1>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Each time someone tried an action that conflicts with one they had already performed for the same agent.</p>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Identities holding access that must not be combined, and each time someone tried an action that conflicts with one they had already performed for the same agent.</p>
       </div>
+      {held ? (
+        <Card className="p-4" data-testid="held-access-conflicts">
+          <h2 className="text-sm font-semibold text-foreground">Access held together now</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            From each identity&apos;s current access, under the rules in effect.{held.capped ? " Only the first 20,000 grants were read." : ""}
+          </p>
+          <div className="mt-3">
+            {held.conflicts.length === 0 ? (
+              <EmptyState title="Nobody holds a forbidden combination" description="Identities appear here when their access breaks a rule in effect." />
+            ) : (
+              <TableContainer label="Access held together" bare>
+                <Thead>
+                  <tr>
+                    <Th>Identity</Th>
+                    <Th>Holds</Th>
+                    <Th>Together with</Th>
+                    <Th hideBelow="lg">Rule</Th>
+                  </tr>
+                </Thead>
+                <tbody>
+                  {held.conflicts.map((c, i) => (
+                    <Tr key={`${c.identityId}-${c.policyId}-${i}`}>
+                      <Td>
+                        <Link href={`/identities/${c.identityId}`} className="font-medium text-foreground hover:underline">
+                          {c.identityName}
+                        </Link>
+                      </Td>
+                      <Td>{c.left.map((e) => held.names.get(e) ?? "An entitlement").join(", ")}</Td>
+                      <Td>{c.right.map((e) => held.names.get(e) ?? "An entitlement").join(", ")}</Td>
+                      <Td hideBelow="lg">
+                        <Link href={`/policies/${c.policyId}`} className="text-primary hover:underline">
+                          {c.policyName}
+                        </Link>
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </TableContainer>
+            )}
+          </div>
+        </Card>
+      ) : null}
       <Card className="p-4">
         {conflicts.length === 0 ? (
           <EmptyState title={cursor ? "No older conflicts" : "No conflicts recorded"} description={cursor ? "This is the end of the list." : "Conflicts appear here when an SoD rule in effect catches one."} />
