@@ -24,7 +24,9 @@ test.describe("Platform-admin authorization boundary (non-negotiable #3)", () =>
  * WID-H10, owner decision 2026-10-14: a PLATFORM_ADMIN_EMAILS address only
  * bootstraps the platform_admins table. Runs when the server under test
  * lists the IAM admin's address in PLATFORM_ADMIN_EMAILS (set the same
- * value for Playwright); nothing is granted, so the run leaves no access.
+ * value for Playwright) and that account's email was confirmed by a mailed
+ * link (an account created already confirmed does not bootstrap); nothing is
+ * granted, so the run leaves no access.
  */
 test.describe("PLATFORM_ADMIN_EMAILS bootstrap (WID-H10)", () => {
   test.skip(!(process.env.PLATFORM_ADMIN_EMAILS ?? "").toLowerCase().includes(TEST_USERS.iamAdminOne.email.toLowerCase()), "PLATFORM_ADMIN_EMAILS does not list the IAM admin");

@@ -105,5 +105,5 @@ export {
 export { ATTRIBUTE_RULE_TRIGGERS, SETTABLE_FIELDS, READABLE_FIELDS } from "./attributeRules";
 
 // IDENTITY-P0-23: merging two records of the same person, and undoing it.
-export { MERGE_FIELDS, mergeDifferences, type MergeField } from "./identityMerge";
+export { MERGE_FIELDS, duplicateReason, mergeDifferences, type MergeField } from "./identityMerge";
 export { findDuplicatesOf, getMergePreview, mergeIdentities, listActiveMergesFor, undoIdentityMerge, type DuplicateCandidate, type MergePreview, type IdentityMerge } from "./identityMergeService";

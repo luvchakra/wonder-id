@@ -5,7 +5,7 @@ import { writeAudit } from "@/lib/audit/writeAudit";
 import { ApiError } from "@/lib/shared/types/foundation";
 import type { Identity } from "@/lib/shared/types/agent-identity";
 import { getIdentity, toIdentity } from "./directory";
-import { chosenColumns, duplicateReason, mergeRefusal } from "./identityMerge";
+import { chosenColumns, duplicateReason, mergeActorRefusal, mergeRefusal } from "./identityMerge";
 
 /**
  * IDENTITY-P0-23 — merging two records of the same person (D-6). A person
@@ -79,6 +79,7 @@ export async function getMergePreview(tenantId: string, survivorId: string, merg
 
 function mergeError(err: { code?: string; message: string }): ApiError {
   if (err.code === "P0002") return new ApiError(404, "NOT_FOUND", err.message);
+  if (err.code === "42501") return new ApiError(403, "SELF_DECISION", err.message);
   if (err.code === "22023" || err.code === "23505") return new ApiError(409, "MERGE_REFUSED", err.message);
   return new ApiError(500, "MERGE_FAILED", "The merge could not be completed. Nothing was changed.");
 }
@@ -97,6 +98,11 @@ export async function mergeIdentities(
   if (preview.refusal) throw new ApiError(409, "MERGE_REFUSED", preview.refusal);
   const fields = chosenColumns(preview.survivor, preview.merged, input.takeFromMerged);
   const reason = input.reason?.trim().slice(0, 500) || null;
+  const refused = mergeActorRefusal(actorId, preview.survivor, preview.merged, reason);
+  if (refused) {
+    await writeAudit({ tenantId, actorId, actorType: "user", action: "identity.merged", objectType: "identity", objectId: preview.survivor.id, outcome: "failure", metadata: { mergedIdentityId: preview.merged.id, refused: refused.code } });
+    throw refused;
+  }
   const { data, error } = await supabaseServiceRole().rpc("merge_identities", {
     p_tenant: tenantId,
     p_survivor: preview.survivor.id,

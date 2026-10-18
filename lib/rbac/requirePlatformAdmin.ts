@@ -48,7 +48,7 @@ export const isPlatformAdminBootstrap = cache(async (): Promise<boolean> => {
   const { data: account, error: accountError } = await admin.auth.admin.getUserById(user.id);
   if (accountError || !account?.user) return false;
   const providers = (account.user.identities ?? []).map((i) => i.provider);
-  const admitted = isListedPlatformAdmin(list, { email: account.user.email, emailConfirmedAt: account.user.email_confirmed_at, isSsoUser: account.user.is_sso_user, providers });
+  const admitted = isListedPlatformAdmin(list, { email: account.user.email, emailConfirmedAt: account.user.email_confirmed_at, confirmationSentAt: account.user.confirmation_sent_at, isSsoUser: account.user.is_sso_user, providers });
   if (admitted) {
     const { data: seen, error: seenError } = await admin.from("platform_audit_logs").select("id").eq("actor_id", user.id).eq("action", ENV_ACCESS_ACTION).limit(1);
     if (!seenError && !seen?.length) await writePlatformAudit({ actorId: user.id, action: ENV_ACCESS_ACTION, newValue: { via: "PLATFORM_ADMIN_EMAILS", providers }, result: "success" });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { chosenColumns, duplicateReason, MERGE_FIELDS, mergeDifferences, mergeRefusal } from "./identityMerge";
+import { chosenColumns, duplicateReason, MERGE_FIELDS, mergeActorRefusal, mergeDifferences, mergeRefusal } from "./identityMerge";
 
 type P = Parameters<typeof mergeDifferences>[0];
 
@@ -64,5 +64,24 @@ describe("IDENTITY-P0-23: merging two records of the same person", () => {
     const sql = readFileSync(join(__dirname, "..", "..", "supabase", "migrations", "0198_identity_merge.sql"), "utf8");
     const listed = /select array\[([^\]]+)\]/.exec(sql)![1].match(/'([a-z_]+)'/g)!.map((s) => s.slice(1, -1));
     expect(MERGE_FIELDS.map((f) => f.column).sort()).toEqual(listed.sort());
+  });
+});
+
+describe("WID-H11: who may merge, and on what evidence", () => {
+  const a = { id: "a", userId: null, displayName: "Ada Lovelace", email: "ada@example.com" };
+  const b = { id: "b", userId: null, displayName: "Ada  lovelace", email: "a.lovelace@example.com" };
+  const stranger = { id: "c", userId: null, displayName: "Bob Ross", email: "bob@example.com" };
+
+  it("refuses a merge in which either record is the actor's own (SELF_DECISION)", () => {
+    expect(mergeActorRefusal("me", { ...a, userId: "me" }, b, "same person")?.code).toBe("SELF_DECISION");
+    expect(mergeActorRefusal("me", a, { ...b, userId: "me" }, "same person")?.code).toBe("SELF_DECISION");
+    expect(mergeActorRefusal("me", { ...a, userId: "someone" }, b, null)).toBeNull();
+  });
+
+  it("needs a reason when the records share no email and no name", () => {
+    expect(mergeActorRefusal("me", a, b, null)).toBeNull();
+    expect(mergeActorRefusal("me", a, stranger, null)?.code).toBe("VALIDATION_FAILED");
+    expect(mergeActorRefusal("me", a, stranger, "   ")?.code).toBe("VALIDATION_FAILED");
+    expect(mergeActorRefusal("me", a, stranger, "HR confirmed the name change")).toBeNull();
   });
 });

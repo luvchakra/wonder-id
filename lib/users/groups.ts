@@ -332,6 +332,8 @@ export async function deleteGroup(tenantId: string, actorId: string, groupId: st
   });
 }
 
+const AUTOMATION_MEMBER_MESSAGE = "An automation credential can't join a group. Give it roles on its own page.";
+
 export async function addGroupMember(tenantId: string, actorId: string, groupId: string, userId: string): Promise<void> {
   const g = await groupIn(tenantId, groupId);
   if (actorId === userId) {
@@ -348,8 +350,14 @@ export async function addGroupMember(tenantId: string, actorId: string, groupId:
     throw new ApiError(403, "SELF_ESCALATION", "You can't add yourself to a group. Another administrator must do it.");
   }
   if (!UUID_RE.test(userId)) throw new ApiError(404, "NOT_FOUND", "No such user in this organization");
-  const { data: m } = await supabaseServiceRole().from("tenant_memberships").select("status").eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle<{ status: string }>();
+  const { data: m } = await supabaseServiceRole().from("tenant_memberships").select("status, account_type").eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle<{ status: string; account_type: string }>();
   if (!m || m.status === "removed") throw new ApiError(404, "NOT_FOUND", "No such user in this organization");
+  // WID-H06: an automation credential's roles change only on its own page
+  // (escalation check, four-eyes), so it never joins a group (migration 0201).
+  if (m.account_type === "automation") {
+    await writeAudit({ tenantId, actorId, actorType: "user", action: "group.member_added", objectType: "group", objectId: g.id, outcome: "failure", metadata: { refused: "AUTOMATION_MEMBER", userId } });
+    throw new ApiError(409, "AUTOMATION_MEMBER", AUTOMATION_MEMBER_MESSAGE);
+  }
   const { error } = await supabaseServiceRole().from("group_members").insert({
     group_id: g.id,
     tenant_id: tenantId,
@@ -387,12 +395,13 @@ export async function addGroupMemberByRule(
   const admin = supabaseServiceRole();
   const [{ data: g, error: gError }, { data: m, error: mError }] = await Promise.all([
     admin.from("groups").select("id, tenant_id, name, status").eq("tenant_id", tenantId).eq("id", groupId).maybeSingle<{ id: string; tenant_id: string; name: string; status: string }>(),
-    admin.from("tenant_memberships").select("tenant_id, status").eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle<{ tenant_id: string; status: string }>(),
+    admin.from("tenant_memberships").select("tenant_id, status, account_type").eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle<{ tenant_id: string; status: string; account_type: string }>(),
   ]);
   if (gError || mError) throw new ApiError(500, "QUERY_FAILED", (gError ?? mError)!.message);
   if (!g || g.tenant_id !== tenantId) throw new ApiError(404, "NOT_FOUND", "The rule's group is not in this organization");
   if (g.status !== "active") throw new ApiError(409, "GROUP_NOT_ACTIVE", `"${g.name}" is not active`);
   if (!m || m.tenant_id !== tenantId || m.status === "removed") throw new ApiError(409, "NOT_A_MEMBER", "This person has no sign-in in this organization");
+  if (m.account_type === "automation") throw new ApiError(409, "AUTOMATION_MEMBER", AUTOMATION_MEMBER_MESSAGE);
   const { error } = await admin.from("group_members").insert({ group_id: g.id, tenant_id: tenantId, user_id: userId, added_by: meta.approvedBy });
   if (error && error.code !== "23505") throw new ApiError(500, "ADD_FAILED", error.message);
   if (error) return "already_member";

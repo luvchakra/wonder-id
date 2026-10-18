@@ -10,7 +10,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 vi.mock("@/lib/tenant/session", () => ({ getSessionUser: async () => ({ id: "u1", aal: "aal1" }) }));
 vi.mock("@/lib/tenant/hostTenant", () => ({ getHostTenant: async () => ({ target: { kind: "main" }, tenant: null }) }));
-vi.mock("@/lib/security/automationCredentials", () => ({ getAutomationAccess: async () => null }));
+let automationAccess: unknown = null;
+vi.mock("@/lib/security/automationCredentials", () => ({ getAutomationAccess: async () => automationAccess }));
 
 type Result = { data: unknown; error: { code?: string; message?: string } | null };
 let results: Record<string, Result>;
@@ -31,6 +32,7 @@ const terms = { scope_type: "tenant", scope_values: [], starts_at: null, expires
 beforeEach(() => {
   vi.resetModules();
   vi.spyOn(console, "error").mockImplementation(() => {});
+  automationAccess = null;
   results = {
     my_memberships: ok([{ tenant_id: "t1", name: "Acme", slug: "acme", account_type: "internal", mfa_required: false }]),
     user_roles: ok([{ tenant_id: "t1", ...terms, roles: role }]),
@@ -66,5 +68,24 @@ describe("getTenantContext when a read fails", () => {
     const ctx = await resolve();
     expect(ctx).toMatchObject({ tenantId: null, permissions: [] });
     expect(ctx.unavailable).toBeUndefined();
+  });
+});
+
+describe("WID-H06: an automation credential's call", () => {
+  const groupRole = { id: "r2", name: "AUDITOR", display_name: "Auditor", status: "active", role_permissions: [{ permissions: { key: "audit.read" } }] };
+  const groupRow = { tenant_id: "t1", groups: { name: "Auditors", status: "active", group_roles: [{ ...terms, roles: groupRole }] } };
+
+  it("a person keeps the roles of their groups", async () => {
+    results.group_members = ok([groupRow]);
+    const ctx = await resolve();
+    expect([...ctx.permissions].sort()).toEqual(["agent.read", "audit.read"]);
+  });
+
+  it("gets nothing from a group, only the roles given on the credential's own page", async () => {
+    results.group_members = ok([groupRow]);
+    automationAccess = { credentialId: "c1" };
+    const ctx = await resolve();
+    expect(ctx.permissions).toEqual(["agent.read"]);
+    expect(ctx.grants?.some((g) => g.source === "GROUP")).toBe(false);
   });
 });
