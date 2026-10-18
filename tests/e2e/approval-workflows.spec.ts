@@ -232,16 +232,15 @@ test.describe.serial("approval workflows", () => {
     const res = await request.post("/api/v1/access/requests", { data: { applicationId: ids.app2, entitlementId: ids.viewer2, subjectIdentityId: ids.s3, justification: "Read-only ERP view" } });
     expect(res.status(), await res.text()).toBe(201);
     const id = (await res.json()).data.id as string;
-    expect(shape(await detail(request, id))).toEqual([
+    // Steps of one level share a stage; their order within it does not matter.
+    const byKind = (rows: unknown[][]) => rows.slice().sort((a, b) => String(a.length > 2 ? a[1] : a[0]).localeCompare(String(b.length > 2 ? b[1] : b[0])));
+    expect(byKind(shape(await detail(request, id)))).toEqual([
       [1, "group", ids.g2, "pending"],
       [1, "named_approver", ids.readOnly, "pending"],
     ]);
     expect((await (await decide(iam, id, "approved")).json()).data.status).toBe("approved");
     const d = await detail(request, id);
-    expect(d.steps.map((s) => [s.approverKind, s.status])).toEqual([
-      ["group", "approved"],
-      ["named_approver", "skipped"],
-    ]);
+    expect(byKind(d.steps.map((s) => [s.approverKind, s.status])).map((r) => r.join(":"))).toEqual(["group:approved", "named_approver:skipped"]);
     expect((await decide(ro, id, "approved")).status()).toBeGreaterThanOrEqual(400);
   });
 
