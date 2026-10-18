@@ -12,7 +12,7 @@ Every story counts equally here, so the many finished product-base stories weigh
 
 ## Completed recently
 
-- ✅ **ACCESS-P0-21** Business and IT roles · this change
+- ✅ **ACCESS-P0-21** Business and IT roles · [#246](https://github.com/luvchakra/wonder-agent/pull/246)
 - ✅ **COMPLIANCE-P0-10** Certification campaigns for every identity type · [#245](https://github.com/luvchakra/wonder-agent/pull/245)
 - ✅ **ACCESS-P0-23** Delegations · [#242](https://github.com/luvchakra/wonder-agent/pull/242)
 - ✅ **FOUNDATION-P0-03.4** MFA foundation · [#239](https://github.com/luvchakra/wonder-agent/pull/239)

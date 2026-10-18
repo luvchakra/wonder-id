@@ -58,6 +58,7 @@ Every story's priority on `../ROADMAP-STORIES.md` comes from this table (owner r
 |---|---|---|
 | EXPERIENCE-P0-32 | Medium | Owner request 2026-10-13: language picker in the header |
 | ACCESS-P0-42 | High | Owner request 2026-10-14: internal fulfilment task assignment instead of ticketing first |
+| ACCESS-P0-43 | High | Owner request 2026-10-18: reusable multi-level approval workflows for many applications |
 | INTEGRATION-P0-26 | Low | Owner decision 2026-10-14: ServiceNow fulfilment waits; internal assignment (ACCESS-P0-42) comes first |
 | QA-P0-02.1, QA-P0-02.2, QA-P0-06 | High | Tenant-isolation, RBAC and sign-in coverage (CLAUDE.md §17.8, P0) |
 | INTEGRATION-* (unfinished) | Low | Owner decision 2026-10-13: integration stories are implemented later |
@@ -104,6 +105,7 @@ Exit test: passed 2026-10-11 by the QA-P0-23 suite, on connector records seeded 
 | ACCESS-P0-32 Time-bound access | Access | #54 | Done | Migration 0124. End dates capped by policy; a reminder before the end with an Extend request (approved like any other); at the end, exactly one removal task per grant; the ledger shows EXPIRED once the source confirms the removal |
 | EXPERIENCE-P0-29 Request tracking and tasks inbox | Experience | #55 | Done | No migration. Each request line shows its real state (waiting, approved, waiting for fulfilment, not yet verified, verified, failed, ended); "Waiting for you" lists fulfilment tasks with the approvals; For lists the people you manage and what you own |
 | QA-P0-24 Request-to-verified suite | QA | #56 | Done | A person, a service account and an agent from request to verified; removal and expiry end revoked; approver ≠ requester; isolation SQL for 0123/0124 (11/11); a repeated reconciliation changes nothing |
+| ACCESS-P0-43 Approval workflows | Access | | Done | Owner request 2026-10-18, migration 0204. Reusable patterns of up to six levels (manager, manager's manager, resource or application owner, a named person, a group where any member approves, access managers), all or any one per level, a level from a risk upwards; a request policy chooses one. Versioned, audited, retire refused while in use; a missing or retired workflow falls back to the strictest route. E2E `approval-workflows.spec.ts` |
 | FOUNDATION-P0-32 Bulk invitation and invitation API | Foundation | #68 | Done | Migration 0125. Users → Import CSV… previews new, already-member and invalid rows and invites only the new; POST /api/v1/users/invitations (dry run; idempotent on e-mail); invitations expire (30 days by default) and can be sent again; roles never beyond the inviter's own permissions. Scripts use an automation credential (FOUNDATION-P0-31) |
 
 Exit test: not run.
@@ -236,3 +238,4 @@ Exit test: not run.
 - 2026-10-14: COMPLIANCE-P0-14, templates, preview, closed-loop and SLA reports, consultation (migrations 0185, 0186).
 - 2026-10-14: COMPLIANCE-P0-14 part 1, campaign templates and preview (migration 0185).
 - 2026-10-14: COMPLIANCE-P0-14 part 2, revocation closure and leaver removal SLA reports.
+- 2026-10-18: ACCESS-P0-43 done, approval workflows (owner request; migration 0204).

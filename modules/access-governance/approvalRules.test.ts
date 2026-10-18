@@ -26,7 +26,7 @@ describe("planApprovalChain", () => {
 
   it("prefers the entitlement owner to the application owner", () => {
     const steps = planApprovalChain(input({ route: "owner_approval", entitlementOwner: person("ent") }));
-    expect(steps).toEqual([{ stage: 1, approverKind: "entitlement_owner", approverIdentityId: "ent", approverUserId: "u-ent", reason: null }]);
+    expect(steps).toEqual([{ stage: 1, approverKind: "entitlement_owner", approverIdentityId: "ent", approverUserId: "u-ent", reason: null, stageRule: "all" }]);
   });
 
   it("routes to access managers, with the reason, when nobody suitable is recorded", () => {
