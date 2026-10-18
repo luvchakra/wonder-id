@@ -3,25 +3,10 @@ import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/requirePermission";
 import { listTenantMembersWithRoles } from "@/lib/rbac/roles";
 import { listAuditLogs } from "@/modules/operations/service";
-import {
-  SOD_CONFLICT_ACTION,
-  listHeldAccessConflicts,
-  listSoDRules,
-  toSoDConflict,
-} from "@/modules/access-governance/service";
+import { SOD_CONFLICT_ACTION, listHeldAccessConflicts, listSoDRules, toSoDConflict } from "@/modules/access-governance/service";
 import { listAgents } from "@/modules/agent-identity/service";
 import { ApiError } from "@/lib/shared/types/foundation";
-import {
-  Badge,
-  Card,
-  EmptyState,
-  LinkButton,
-  TableContainer,
-  Td,
-  Th,
-  Thead,
-  Tr,
-} from "@/modules/ui";
+import { Badge, Card, EmptyState, LinkButton, TableContainer, Td, Th, Thead, Tr } from "@/modules/ui";
 
 // SOD › SoD Conflicts (owner request, 2026-10-10): every conflict an SoD
 // rule caught, refused or allowed and recorded, read from the audit trail
@@ -31,21 +16,9 @@ import {
 // says must not be combined, read from their current access.
 
 const PAGE_SIZE = 50;
-const fmt = (iso: string) =>
-  new Date(iso).toLocaleString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  }) + " UTC";
+const fmt = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
 
-export default async function SoDConflictsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ before?: string }>;
-}) {
+export default async function SoDConflictsPage({ searchParams }: { searchParams: Promise<{ before?: string }> }) {
   let ctx;
   try {
     ctx = await requirePermission("audit.read");
@@ -62,106 +35,64 @@ export default async function SoDConflictsPage({
     listTenantMembersWithRoles(tenantId),
     listAgents(tenantId),
     canReadPolicies ? listSoDRules(tenantId) : Promise.resolve([]),
-    canReadPolicies && !cursor
-      ? listHeldAccessConflicts(tenantId)
-      : Promise.resolve(null),
+    canReadPolicies && !cursor ? listHeldAccessConflicts(tenantId) : Promise.resolve(null),
   ]);
   const conflicts = page.entries.map(toSoDConflict);
-  const person = new Map(
-    members.map((m) => [m.userId, m.displayName || m.email]),
-  );
-  const agent = new Map(
-    agents.map((a) => [a.id, a.displayName ?? a.agentName]),
-  );
+  const person = new Map(members.map((m) => [m.userId, m.displayName || m.email]));
+  const agent = new Map(agents.map((a) => [a.id, a.displayName ?? a.agentName]));
   const policy = new Map(rules.map((r) => [r.policyId, r.policyName]));
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-foreground">
-          SoD Conflicts
-        </h1>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-          Identities holding access that must not be combined, and each time
-          someone tried an action that conflicts with one they had already
-          performed for the same agent.
-        </p>
+        <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-foreground">SoD Conflicts</h1>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Identities holding access that must not be combined, and each time someone tried an action that conflicts with one they had already performed for the same agent.</p>
       </div>
       {held ? (
         <Card className="p-4">
-          <div data-testid="held-access-conflicts">
-            <h2 className="text-sm font-semibold text-foreground">
-              Access held together now
-            </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              From each identity&apos;s current access, under the rules in
-              effect.
-              {held.capped ? " Only the first 20,000 grants were read." : ""}
-            </p>
-            <div className="mt-3">
-              {held.conflicts.length === 0 ? (
-                <EmptyState
-                  title="Nobody holds a forbidden combination"
-                  description="Identities appear here when their access breaks a rule in effect."
-                />
-              ) : (
-                <TableContainer label="Access held together" bare>
-                  <Thead>
-                    <tr>
-                      <Th>Identity</Th>
-                      <Th>Holds</Th>
-                      <Th>Together with</Th>
-                      <Th hideBelow="lg">Rule</Th>
-                    </tr>
-                  </Thead>
-                  <tbody>
-                    {held.conflicts.map((c, i) => (
-                      <Tr key={`${c.identityId}-${c.policyId}-${i}`}>
-                        <Td>
-                          <Link
-                            href={`/identities/${c.identityId}`}
-                            className="font-medium text-foreground hover:underline"
-                          >
-                            {c.identityName}
-                          </Link>
-                        </Td>
-                        <Td>
-                          {c.left
-                            .map((e) => held.names.get(e) ?? "An entitlement")
-                            .join(", ")}
-                        </Td>
-                        <Td>
-                          {c.right
-                            .map((e) => held.names.get(e) ?? "An entitlement")
-                            .join(", ")}
-                        </Td>
-                        <Td hideBelow="lg">
-                          <Link
-                            href={`/policies/${c.policyId}`}
-                            className="text-primary hover:underline"
-                          >
-                            {c.policyName}
-                          </Link>
-                        </Td>
-                      </Tr>
-                    ))}
-                  </tbody>
-                </TableContainer>
-              )}
-            </div>
+          <h2 className="text-sm font-semibold text-foreground">Access held together now</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            From each identity&apos;s current access, under the rules in effect.{held.capped ? " Only the first 20,000 grants were read." : ""}
+          </p>
+          <div className="mt-3" data-testid="held-access-conflicts">
+            {held.conflicts.length === 0 ? (
+              <EmptyState title="Nobody holds a forbidden combination" description="Identities appear here when their access breaks a rule in effect." />
+            ) : (
+              <TableContainer label="Access held together" bare>
+                <Thead>
+                  <tr>
+                    <Th>Identity</Th>
+                    <Th>Holds</Th>
+                    <Th>Together with</Th>
+                    <Th hideBelow="lg">Rule</Th>
+                  </tr>
+                </Thead>
+                <tbody>
+                  {held.conflicts.map((c, i) => (
+                    <Tr key={`${c.identityId}-${c.policyId}-${i}`}>
+                      <Td>
+                        <Link href={`/identities/${c.identityId}`} className="font-medium text-foreground hover:underline">
+                          {c.identityName}
+                        </Link>
+                      </Td>
+                      <Td>{c.left.map((e) => held.names.get(e) ?? "An entitlement").join(", ")}</Td>
+                      <Td>{c.right.map((e) => held.names.get(e) ?? "An entitlement").join(", ")}</Td>
+                      <Td hideBelow="lg">
+                        <Link href={`/policies/${c.policyId}`} className="text-primary hover:underline">
+                          {c.policyName}
+                        </Link>
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </TableContainer>
+            )}
           </div>
         </Card>
       ) : null}
       <Card className="p-4">
         {conflicts.length === 0 ? (
-          <EmptyState
-            title={cursor ? "No older conflicts" : "No conflicts recorded"}
-            description={
-              cursor
-                ? "This is the end of the list."
-                : "Conflicts appear here when an SoD rule in effect catches one."
-            }
-          />
+          <EmptyState title={cursor ? "No older conflicts" : "No conflicts recorded"} description={cursor ? "This is the end of the list." : "Conflicts appear here when an SoD rule in effect catches one."} />
         ) : (
           <TableContainer label="SoD conflicts" bare>
             <Thead>
@@ -179,29 +110,18 @@ export default async function SoDConflictsPage({
               {conflicts.map((c) => (
                 <Tr key={c.id}>
                   <Td>
-                    <span className="whitespace-nowrap text-sm">
-                      {fmt(c.at)}
-                    </span>
+                    <span className="whitespace-nowrap text-sm">{fmt(c.at)}</span>
                   </Td>
-                  <Td>
-                    {c.actorId
-                      ? (person.get(c.actorId) ?? "A former member")
-                      : "—"}
-                  </Td>
+                  <Td>{c.actorId ? (person.get(c.actorId) ?? "A former member") : "—"}</Td>
                   <Td>
                     <code className="text-xs">{c.attemptedAction ?? "—"}</code>
                   </Td>
                   <Td hideBelow="lg">
-                    <code className="text-xs">
-                      {c.conflictingAction ?? "—"}
-                    </code>
+                    <code className="text-xs">{c.conflictingAction ?? "—"}</code>
                   </Td>
                   <Td hideBelow="lg">
                     {c.agentId && agent.has(c.agentId) ? (
-                      <Link
-                        href={`/agents/${c.agentId}`}
-                        className="text-primary hover:underline"
-                      >
+                      <Link href={`/agents/${c.agentId}`} className="text-primary hover:underline">
                         {agent.get(c.agentId)}
                       </Link>
                     ) : (
@@ -209,16 +129,11 @@ export default async function SoDConflictsPage({
                     )}
                   </Td>
                   <Td>
-                    <Badge tone={c.blocked ? "danger" : "warning"}>
-                      {c.blocked ? "Refused" : "Allowed, recorded"}
-                    </Badge>
+                    <Badge tone={c.blocked ? "danger" : "warning"}>{c.blocked ? "Refused" : "Allowed, recorded"}</Badge>
                   </Td>
                   <Td hideBelow="xl">
                     {c.policyId && policy.has(c.policyId) ? (
-                      <Link
-                        href={`/policies/${c.policyId}`}
-                        className="text-primary hover:underline"
-                      >
+                      <Link href={`/policies/${c.policyId}`} className="text-primary hover:underline">
                         {policy.get(c.policyId)}
                       </Link>
                     ) : (
@@ -230,21 +145,14 @@ export default async function SoDConflictsPage({
             </tbody>
           </TableContainer>
         )}
-        <nav
-          className="mt-3 flex flex-wrap items-center justify-end gap-2 text-sm"
-          aria-label="Pages"
-        >
+        <nav className="mt-3 flex flex-wrap items-center justify-end gap-2 text-sm" aria-label="Pages">
           {cursor ? (
             <LinkButton href="/sod/conflicts" variant="outline" size="sm">
               Newest
             </LinkButton>
           ) : null}
           {page.nextCursor ? (
-            <LinkButton
-              href={`/sod/conflicts?before=${encodeURIComponent(page.nextCursor)}`}
-              variant="outline"
-              size="sm"
-            >
+            <LinkButton href={`/sod/conflicts?before=${encodeURIComponent(page.nextCursor)}`} variant="outline" size="sm">
               Older
             </LinkButton>
           ) : null}
