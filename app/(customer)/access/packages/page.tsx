@@ -7,7 +7,7 @@ import { getIdentityForUser } from "@/modules/agent-identity/service";
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, LinkButton, fieldInputClass, fieldLabelClass, ObjectActionsMenu } from "@/modules/ui";
 import { objectActionsFor } from "@/modules/operations/exportRegistry";
 import { cn } from "@/lib/utils";
-import { APPROVAL, RISK_TONE, STATUS_TONE } from "./labels";
+import { APPROVAL, KIND, RISK_TONE, STATUS_TONE } from "./labels";
 
 // ACCESS-P0-20 — access packages (spec §12.2): browse what you may request
 // — the package's policy decides what you can discover — with what each
@@ -118,6 +118,11 @@ export default async function PackagesPage({ searchParams }: { searchParams: Pro
                 description={p.description ?? undefined}
                 actions={
                   <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                    {p.kind !== "package" ? (
+                      <Badge tone="info" className="whitespace-nowrap">
+                        {KIND[p.kind]}
+                      </Badge>
+                    ) : null}
                     {view === "manage" ? (
                       <Badge tone={STATUS_TONE[p.status]} className="whitespace-nowrap">
                         {p.status}

@@ -4564,3 +4564,54 @@ Owner decisions, 17 Oct:
 - When the agent has no owner, nobody is notified. An access manager
   decides from the page.
 - Agent→person delegation, which the owner did not choose.
+
+## 2026-10-18 — ACCESS-P0-21: business and IT roles (Partial)
+
+Owner decision 2026-10-18 (asked in chat, recommended option): business and
+IT roles are a kind of access package, not a separate object, so requests,
+approvals, assignment, provisioning, expiry and owner reviews are reused.
+
+**Built:**
+- Migration 0203: `access_packages.kind` (`package` default, `business_role`,
+  `it_role`); `access_package_includes` (a role or package includes other
+  ones; same-tenant foreign keys, no self, a trigger refuses loops at any
+  depth; members read, only the service writes; provenance trigger; listed
+  in `lib/provenance/tables.ts`; covering indexes).
+- `packageRules.ts` (pure): `PACKAGE_KINDS`, `flattenContents` (own contents
+  first, then included active packages', each once, marked with where it
+  came from; a loop is cut), `includeRefusal`, `simulateRoleChange`.
+- `packages.ts`: `resourcesOf` returns flattened contents, so the list,
+  page, approval digest, assignment items and owner reviews all see what a
+  role grants. `listPackagesForReview` keeps only a role's own contents (its
+  includes are reviewed with the included role). `addPackageInclude` /
+  `removePackageInclude` (audited `access.package_include_added/removed`);
+  a contents change sends the package and every birthright package that
+  includes it back to waiting for its second approval
+  (`contentsChanged`). `simulatePackageChange` reads the identity's access
+  ledger and says what would be granted or removed, the highest risk and
+  eligibility; it changes nothing.
+- API: `POST /api/v1/access/packages/:id/includes`,
+  `DELETE …/includes/:includedId`, `POST …/simulate` (all `access.manage`).
+- UI: Kind on the package form, a Kind badge on the list and page,
+  inherited items marked "from …" (no Remove), an Includes card and a
+  folded "Simulate adding or removing" for access managers. Campaign scope
+  label now says "access packages and business roles".
+
+**Verified:**
+- `packageRules.test.ts` 24 passed (6 new: flatten with provenance, loop
+  cut, include refusals, simulate add and remove, kind validation);
+  `tests/architecture`, `modules/access-governance`,
+  `modules/certification-compliance`, `lib/provenance`: 57 files, 464
+  passed. Typecheck and eslint clean.
+- Live SQL `tests/access/business-roles.sql` against the dev project: 9/9.
+  Migration applied; advisors: the new table's tenant foreign key got a
+  covering index; nothing else new.
+- E2E `access-packages.spec.ts` "ACCESS-P0-21" (roles include, loops
+  refused, flattened contents, simulation, assignment grants both, another
+  organization refused): run on Vercel before merge.
+
+**Left:** SoD impact in the simulation waits on entitlement conflict rules
+(ACCESS-P0-22); the simulation says so. Includes change only new
+assignments, as resource changes already do. Two concurrent includes that
+together form a loop are not prevented (each trigger sees the other's row
+only after commit); recorded, not built.

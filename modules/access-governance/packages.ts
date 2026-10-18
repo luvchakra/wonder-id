@@ -21,12 +21,17 @@ import {
   moverReviewAction,
   keepRefusal,
   moverReviewDue,
+  flattenContents,
+  includeRefusal,
   packageRisk,
+  simulateRoleChange,
   validatePackageInput,
   type AssignmentStatus,
   type BirthrightAction,
   type BirthrightStatus,
   type ItemStatus,
+  type PackageKind,
+  type RoleSimulation,
 } from "./packageRules";
 import { markGrantsFulfilled, pendAssignment, queueRemoval, withdrawPendingGrants } from "./pendingGrants";
 
@@ -53,6 +58,8 @@ export type AccessPackage = {
   /** FOUNDATION-P0-34: its number in URLs (migration 0192). */
   ref: number | null;
   name: string;
+  /** ACCESS-P0-21: a package, a business role or an IT role. */
+  kind: PackageKind;
   description: string | null;
   ownerIdentityId: string | null;
   ownerName: string | null;
@@ -85,6 +92,9 @@ export type PackageResource = {
   entitlementName: string | null;
   privilegeLevel: string | null;
   risk: RiskLevel;
+  /** ACCESS-P0-21: inherited from an included role or package (null: its own). */
+  fromPackageId: string | null;
+  fromPackageName: string | null;
 };
 
 export type PackageDetail = AccessPackage & { resources: PackageResource[]; risk: RiskLevel };
@@ -94,6 +104,7 @@ function toPackage(r: Record<string, unknown>): Omit<AccessPackage, "ownerName">
     id: r.id as string,
     ref: (r.ref as number | null) ?? null,
     name: r.name as string,
+    kind: ((r.kind as PackageKind | undefined) ?? "package"),
     description: (r.description as string | null) ?? null,
     ownerIdentityId: (r.owner_identity_id as string | null) ?? null,
     status: r.status as AccessPackage["status"],
@@ -124,7 +135,7 @@ type ResourceRow = {
   entitlements: { name: string; privilege_level: string | null; data_classification: string | null } | null;
 };
 
-function toResource(r: ResourceRow): PackageResource {
+function toResource(r: ResourceRow): Omit<PackageResource, "fromPackageId" | "fromPackageName"> {
   const app = r.applications;
   const ent = r.entitlements;
   return {
@@ -141,18 +152,173 @@ function toResource(r: ResourceRow): PackageResource {
 
 const RESOURCE_SELECT = "id, application_id, entitlement_id, applications(name, display_name, risk_level, data_classification, onboarding_status), entitlements(name, privilege_level, data_classification)";
 
-async function resourcesOf(tenantId: string, packageIds: string[], client: "user" | "service" = "user"): Promise<Map<string, PackageResource[]>> {
+type Client = "user" | "service";
+const clientFor = async (client: Client) => (client === "user" ? await supabaseServer() : supabaseServiceRole());
+
+/**
+ * ACCESS-P0-21: the includes below `packageIds`, as a map from a package to
+ * the active packages it includes, with every package's name. Walked level
+ * by level (the database refuses cycles; at most ten levels are read).
+ */
+async function includesBelow(tenantId: string, packageIds: string[], client: Client): Promise<{ includes: Map<string, string[]>; names: Map<string, string> }> {
+  const supabase = await clientFor(client);
+  const includes = new Map<string, string[]>();
+  const names = new Map<string, string>();
+  let frontier = [...new Set(packageIds)];
+  const done = new Set<string>();
+  for (let depth = 0; frontier.length && depth < 10; depth++) {
+    frontier.forEach((id) => done.add(id));
+    const { data, error } = await supabase
+      .from("access_package_includes")
+      .select("package_id, included_package_id, access_packages!access_package_includes_included_package_id_tenant_id_fkey(name, status)")
+      .eq("tenant_id", tenantId)
+      .in("package_id", frontier)
+      .limit(2000);
+    if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+    const next: string[] = [];
+    for (const r of (data ?? []) as unknown as { package_id: string; included_package_id: string; access_packages: { name: string; status: string } | null }[]) {
+      if (r.access_packages?.status !== "active") continue;
+      includes.set(r.package_id, [...(includes.get(r.package_id) ?? []), r.included_package_id]);
+      names.set(r.included_package_id, r.access_packages.name);
+      if (!done.has(r.included_package_id)) next.push(r.included_package_id);
+    }
+    frontier = [...new Set(next)];
+  }
+  return { includes, names };
+}
+
+/** What each package grants: its own resources and those of the active roles and packages it includes. */
+async function resourcesOf(tenantId: string, packageIds: string[], client: Client = "user"): Promise<Map<string, PackageResource[]>> {
   const out = new Map<string, PackageResource[]>();
   if (!packageIds.length) return out;
-  const supabase = client === "user" ? await supabaseServer() : supabaseServiceRole();
-  const { data, error } = await supabase.from("access_package_resources").select(`package_id, ${RESOURCE_SELECT}`).eq("tenant_id", tenantId).in("package_id", packageIds).order("created_at").limit(5000);
+  const { includes, names } = await includesBelow(tenantId, packageIds, client);
+  const all = [...new Set([...packageIds, ...[...includes.values()].flat()])];
+  const supabase = await clientFor(client);
+  const { data, error } = await supabase.from("access_package_resources").select(`package_id, ${RESOURCE_SELECT}`).eq("tenant_id", tenantId).in("package_id", all).order("created_at").limit(5000);
   if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
-  for (const r of data ?? []) {
-    const list = out.get(r.package_id as string) ?? [];
-    list.push(toResource(r as unknown as ResourceRow));
-    out.set(r.package_id as string, list);
+  const own = new Map<string, ReturnType<typeof toResource>[]>();
+  for (const r of data ?? []) own.set(r.package_id as string, [...(own.get(r.package_id as string) ?? []), toResource(r as unknown as ResourceRow)]);
+  for (const id of packageIds) {
+    out.set(
+      id,
+      flattenContents(id, own, includes).map((r) => ({ ...r, fromPackageName: r.fromPackageId ? (names.get(r.fromPackageId) ?? null) : null })),
+    );
   }
   return out;
+}
+
+/**
+ * A package's contents changed: it, and every birthright package that
+ * includes it (directly or through others), needs its second approval again.
+ */
+async function contentsChanged(tenantId: string, actorId: string, packageId: string): Promise<void> {
+  const admin = supabaseServiceRole();
+  const affected = new Set([packageId]);
+  let frontier = [packageId];
+  for (let depth = 0; frontier.length && depth < 10; depth++) {
+    const { data, error } = await admin.from("access_package_includes").select("package_id").eq("tenant_id", tenantId).in("included_package_id", frontier).limit(2000);
+    if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+    frontier = (data ?? []).map((r) => r.package_id as string).filter((id) => !affected.has(id));
+    frontier.forEach((id) => affected.add(id));
+  }
+  for (const id of affected) await birthrightBackToPending(tenantId, actorId, id, "contents");
+}
+
+export type IncludedPackage = { id: string; ref: number | null; name: string; kind: PackageKind; status: string };
+
+/** The roles and packages this one includes directly, for its page. */
+export async function listIncludedPackages(tenantId: string, packageId: string): Promise<IncludedPackage[]> {
+  if (!UUID_RE.test(packageId)) return [];
+  const supabase = await supabaseServer();
+  const { data, error } = await supabase
+    .from("access_package_includes")
+    .select("access_packages!access_package_includes_included_package_id_tenant_id_fkey(id, ref, name, kind, status)")
+    .eq("tenant_id", tenantId)
+    .eq("package_id", packageId)
+    .limit(200);
+  if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  return ((data ?? []) as unknown as { access_packages: { id: string; ref: number | null; name: string; kind: PackageKind; status: string } | null }[])
+    .map((r) => r.access_packages)
+    .filter((p): p is IncludedPackage => Boolean(p))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function includesMap(tenantId: string): Promise<Map<string, string[]>> {
+  const { data, error } = await supabaseServiceRole().from("access_package_includes").select("package_id, included_package_id").eq("tenant_id", tenantId).limit(5000);
+  if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  const map = new Map<string, string[]>();
+  for (const r of data ?? []) map.set(r.package_id as string, [...(map.get(r.package_id as string) ?? []), r.included_package_id as string]);
+  return map;
+}
+
+/** ACCESS-P0-21: a role includes another active role or package. No loops; audited. */
+export async function addPackageInclude(tenantId: string, actorId: string, packageId: string, includedId: unknown): Promise<void> {
+  const included = typeof includedId === "string" ? includedId : "";
+  if (!UUID_RE.test(packageId) || !UUID_RE.test(included)) throw new ApiError(400, "VALIDATION_FAILED", "includedPackageId: an id");
+  const admin = supabaseServiceRole();
+  const [{ data: pkgs, error }, includes] = await Promise.all([
+    admin.from("access_packages").select("id, tenant_id, status").eq("tenant_id", tenantId).in("id", [packageId, included]),
+    includesMap(tenantId),
+  ]);
+  if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  const pkg = pkgs?.find((p) => p.id === packageId && p.tenant_id === tenantId);
+  if (!pkg) throw new ApiError(404, "NOT_FOUND", "No such role or package");
+  if (pkg.status === "retired") throw new ApiError(409, "PACKAGE_RETIRED", "A retired role cannot change");
+  const target = pkgs?.find((p) => p.id === included && p.tenant_id === tenantId) ?? null;
+  const refusal = includeRefusal(packageId, target ? { id: target.id as string, status: target.status as string } : null, includes);
+  if (refusal) throw new ApiError(409, "INCLUDE_REFUSED", refusal);
+  const { error: insertError } = await admin.from("access_package_includes").insert({ tenant_id: tenantId, package_id: packageId, included_package_id: included });
+  if (insertError?.code === "23505") throw new ApiError(409, "DUPLICATE", "It already includes that");
+  if (insertError?.code === "23514") throw new ApiError(409, "INCLUDE_REFUSED", "That would make a loop: it already includes this role.");
+  if (insertError) throw new ApiError(500, "CREATE_FAILED", insertError.message);
+  await admin.from("access_packages").update({ updated_at: new Date().toISOString() }).eq("tenant_id", tenantId).eq("id", packageId);
+  await writeAudit({ tenantId, actorId, actorType: "user", action: "access.package_include_added", objectType: "access_package", objectId: packageId, outcome: "success", metadata: { includedPackageId: included } });
+  await contentsChanged(tenantId, actorId, packageId);
+}
+
+export async function removePackageInclude(tenantId: string, actorId: string, packageId: string, includedId: string): Promise<void> {
+  if (!UUID_RE.test(packageId) || !UUID_RE.test(includedId)) throw new ApiError(404, "NOT_FOUND", "No such included role");
+  const admin = supabaseServiceRole();
+  const { data, error } = await admin.from("access_package_includes").delete().eq("tenant_id", tenantId).eq("package_id", packageId).eq("included_package_id", includedId).select("id").maybeSingle();
+  if (error) throw new ApiError(500, "DELETE_FAILED", error.message);
+  if (!data) throw new ApiError(404, "NOT_FOUND", "It doesn't include that");
+  await admin.from("access_packages").update({ updated_at: new Date().toISOString() }).eq("tenant_id", tenantId).eq("id", packageId);
+  await writeAudit({ tenantId, actorId, actorType: "user", action: "access.package_include_removed", objectType: "access_package", objectId: packageId, outcome: "success", metadata: { includedPackageId: includedId } });
+  await contentsChanged(tenantId, actorId, packageId);
+}
+
+/**
+ * ACCESS-P0-21: what assigning or removing this role would do to one
+ * identity's access, computed from its access ledger. Nothing is changed.
+ */
+export async function simulatePackageChange(
+  tenantId: string,
+  packageId: string,
+  identityId: string,
+  action: "add" | "remove",
+): Promise<RoleSimulation & { eligible: { eligible: boolean; reasons: string[] }; holds: boolean; ledgerRefreshed: boolean }> {
+  if (!UUID_RE.test(packageId) || !UUID_RE.test(identityId)) throw new ApiError(400, "VALIDATION_FAILED", "packageId and identityId: ids");
+  const { getIdentityAccessLedger } = await import("./ledger");
+  const supabase = await supabaseServer();
+  const [pkg, subject, ledger, held] = await Promise.all([
+    getPackage(tenantId, packageId),
+    getIdentity(tenantId, identityId),
+    getIdentityAccessLedger(tenantId, identityId),
+    supabase.from("access_package_assignments").select("id").eq("tenant_id", tenantId).eq("package_id", packageId).eq("identity_id", identityId).in("status", LIVE).limit(1).maybeSingle(),
+  ]);
+  if (!pkg) throw new ApiError(404, "NOT_FOUND", "No such role or package");
+  if (!subject) throw new ApiError(404, "NOT_FOUND", "That identity is not in this organization");
+  if (held.error) throw new ApiError(500, "QUERY_FAILED", held.error.message);
+  const assignmentId = (held.data?.id as string | undefined) ?? null;
+  if (action === "remove" && !assignmentId) throw new ApiError(409, "NOT_ASSIGNED", "This identity doesn't hold it, so there is nothing to remove.");
+  const contents = pkg.resources.map((r) => ({ applicationId: r.applicationId, entitlementId: r.entitlementId, label: r.entitlementName ? `${r.applicationName} · ${r.entitlementName}` : r.applicationName, risk: r.risk }));
+  const sim = simulateRoleChange(action, contents, ledger.entries, assignmentId);
+  return {
+    ...sim,
+    eligible: checkEligibility(pkg, { identityType: subject.identityType, department: subject.department, status: subject.status }),
+    holds: Boolean(assignmentId),
+    ledgerRefreshed: ledger.refreshed,
+  };
 }
 
 async function withOwners<T extends Omit<AccessPackage, "ownerName">>(tenantId: string, rows: T[]): Promise<(T & { ownerName: string | null })[]> {
@@ -557,8 +723,8 @@ export async function addPackageResource(tenantId: string, actorId: string, pack
   if (error || !data) throw new ApiError(500, "CREATE_FAILED", error?.message ?? "Could not add it");
   await admin.from("access_packages").update({ updated_at: new Date().toISOString() }).eq("tenant_id", tenantId).eq("id", packageId);
   await writeAudit({ tenantId, actorId, actorType: "user", action: "access.package_resource_added", objectType: "access_package", objectId: packageId, outcome: "success", metadata: { applicationId, entitlementId } });
-  await birthrightBackToPending(tenantId, actorId, packageId, "contents");
-  return toResource(data as unknown as ResourceRow);
+  await contentsChanged(tenantId, actorId, packageId);
+  return { ...toResource(data as unknown as ResourceRow), fromPackageId: null, fromPackageName: null };
 }
 
 /**
@@ -574,7 +740,8 @@ export async function listPackagesForReview(tenantId: string, packageId: string 
   if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
   const rows = (data ?? []).filter((r) => r.tenant_id === tenantId).map(toPackage);
   const resources = await resourcesOf(tenantId, rows.map((r) => r.id), "service");
-  return rows.map((p) => ({ id: p.id, ref: p.ref, name: p.name, ownerIdentityId: p.ownerIdentityId, birthright: p.birthrightStatus !== "off", resources: resources.get(p.id) ?? [] }));
+  // A role's owner reviews what the role itself contains; what it includes is reviewed with the included role.
+  return rows.map((p) => ({ id: p.id, ref: p.ref, name: p.name, ownerIdentityId: p.ownerIdentityId, birthright: p.birthrightStatus !== "off", resources: (resources.get(p.id) ?? []).filter((r) => !r.fromPackageId) }));
 }
 
 export async function removePackageResource(tenantId: string, actorId: string, packageId: string, resourceId: string): Promise<void> {
@@ -585,7 +752,7 @@ export async function removePackageResource(tenantId: string, actorId: string, p
   if (!data) throw new ApiError(404, "NOT_FOUND", "No such resource in this package");
   await admin.from("access_packages").update({ updated_at: new Date().toISOString() }).eq("tenant_id", tenantId).eq("id", packageId);
   await writeAudit({ tenantId, actorId, actorType: "user", action: "access.package_resource_removed", objectType: "access_package", objectId: packageId, outcome: "success", metadata: { applicationId: data.application_id, entitlementId: data.entitlement_id } });
-  await birthrightBackToPending(tenantId, actorId, packageId, "contents");
+  await contentsChanged(tenantId, actorId, packageId);
 }
 
 // ------------------------------------------------------------ requests

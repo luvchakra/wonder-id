@@ -389,15 +389,16 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "access-packages",
     title: "Access packages",
     category: "Access",
-    updated: "2026-10-16",
+    updated: "2026-10-18",
     summary:
       "An access package bundles the entitlements a job needs so they can be requested, approved and assigned together, and removed together when they expire.",
     body: [
       "Access › Access Packages lists the packages you are eligible to see, with their risk and who approves them. People who manage access also see a Manage view with drafts and retired packages, and can create one: what it includes, who it is for, who approves it, for how long, and how often it is certified.",
       "Open a package to see what it includes and to request it, for yourself or someone else. A package request goes through the same approvals as any other request, and changing what a package includes means waiting requests need approval again. Once approved, each item is set up as its own piece of work; one that fails is shown as failed and the assignment as partly failed, rather than hidden.",
       "Access managers can also assign a package directly, without a request, for example to an AI agent. That is audited. Assignments can expire; expiry opens removal work for every item in the package, and ending an assignment early does the same.",
+      "A package's Kind can be Access package, Business role or IT role; roles work exactly like packages. Under Includes, a role can include other active roles and packages: assigning it grants its own contents and theirs, and each inherited item says which role it comes from. A role can't include itself, directly or through another role. Simulate adding or removing shows what a role would grant or take away for one identity, from their recorded access, without changing anything.",
     ],
-    keywords: ["package", "access package", "bundle", "assignment", "expiry", "provisioning", "assign directly", "partially failed", "retire package"],
+    keywords: ["package", "access package", "bundle", "assignment", "expiry", "provisioning", "assign directly", "partially failed", "retire package", "business role", "it role", "role hierarchy", "includes", "simulate"],
     href: "/access/packages",
   },
   {

@@ -36,6 +36,7 @@ export default async function NewPackagePage() {
             people={people.map((p) => ({ id: p.id, label: `${p.displayName}${p.email ? ` (${p.email})` : ""}` }))}
             defaults={{
               name: "",
+              kind: "package",
               description: null,
               ownerIdentityId: null,
               eligibleIdentityTypes: ["HUMAN"],

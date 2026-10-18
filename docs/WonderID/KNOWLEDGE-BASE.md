@@ -329,6 +329,9 @@ An AI assistant can **propose** an onboarding configuration; a person always rev
 
 **Access packages**
 - Bundles of access that are commonly needed together, requested in one go.
+- **Business and IT roles** are kinds of access package: they are requested, approved, assigned, reviewed and ended the same way.
+  - A role (or package) can include other active roles and packages. Assigning it grants its own contents and theirs; the role's page shows which role each item comes from. A role can't include itself, directly or through another role.
+  - **Simulate adding or removing** (on the role's page, for access managers) shows what it would grant or take away for one identity, from their recorded access, and the highest risk involved. Nothing is changed. Separation of duties between entitlements is not checked yet.
 - **Birthright:** a package can be given automatically to the people it is for (by type and department) when they join, are rehired or move. They get it without a request; it is set up and verified like any other access.
   - Two administrators turn birthright on: one asks, someone else approves.
   - Any change to what the package includes, or to who it is for, needs approval again; until then nobody new gets it.
@@ -451,7 +454,7 @@ Findings are raised for:
 - **Who can review:** reviewers can't review their own access.
 - **People's access:** a campaign can cover the application access people, contractors and service accounts hold (all of it, one application, or privileged access only). Each item goes to the person's manager, the application's owner or a named reviewer; the named reviewer takes items nobody else fits. A revoke becomes a removal that is already approved, carried out by a task or the connection, and counted as done only once the system no longer shows it.
 - **WonderID roles:** a campaign can cover the roles members hold in WonderID itself, directly or through a group (all of them, or privileged roles only, which are listed first). Each item shows the person, the role and where it comes from, and goes to the person's manager or a named reviewer. A revoke takes effect at once: the role is removed, or the person leaves the group the role comes from. Automation credentials are reviewed on their own page.
-- **Access packages (owner review):** a campaign can cover what each active access package contains (all packages, or one). Each item is one application or entitlement in a package and goes to the package's owner, or the named reviewer when the package has none. Certify keeps it; revoke removes it from the package at once. People who already hold the package keep their access, and a birthright package waits for its approval again.
+- **Access packages and roles (owner review):** a campaign can cover what each active access package or role contains (all of them, or one). A role's owner reviews what the role itself contains; what it includes is reviewed with the included role. Each item is one application or entitlement in a package and goes to the package's owner, or the named reviewer when the package has none. Certify keeps it; revoke removes it from the package at once. People who already hold the package keep their access, and a birthright package waits for its approval again.
 - **Applications (owner review):** a campaign can cover the entitlements of active applications (all, or one). Each item is one entitlement the application offers for certification. It goes to the entitlement's owner, or else the application's business owner, or else the named reviewer. Certify keeps it; revoke disables it, so nobody can request it any more. People who already hold it keep it until an access review removes it.
 
 **Policies**
@@ -675,6 +678,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 18 Oct 2026 | Business and IT roles: a kind of access package that can include other roles, with a simulation of adding or removing one. Owner reviews cover roles too. |
 | 18 Oct 2026 | Global Configuration export and import also carry identity attributes. |
 | 18 Oct 2026 | Nobody can merge their own person record, and merging two records with no shared email or name needs a reason. Automation credentials can't join groups. A vendor-console bootstrap address signed in by email must have been confirmed by a mailed link. |
 | 17 Oct 2026 | A person can let an AI agent act for them (or an agent for another agent), once the agent's owner approves; the Runtime Gateway holds any request made on someone's behalf without such a delegation. |

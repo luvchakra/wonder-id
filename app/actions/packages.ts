@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/rbac/requirePermission";
 import {
   addPackageResource,
+  addPackageInclude,
+  removePackageInclude,
+  simulatePackageChange,
   assignPackageDirect,
   createPackage,
   removePackageResource,
@@ -38,6 +41,7 @@ const refresh = (packageId?: string) => {
 function packageInput(f: FormData): Record<string, unknown> {
   return {
     name: str(f, "name") ?? "",
+    kind: str(f, "kind"),
     description: f.get("description") === null ? undefined : String(f.get("description") ?? ""),
     ownerIdentityId: f.has("ownerIdentityId") ? (str(f, "ownerIdentityId") ?? null) : undefined,
     eligibleIdentityTypes: f.getAll("eligibleIdentityTypes").map(String),
@@ -179,5 +183,55 @@ export async function revokeAssignmentAction(packageId: string, assignmentId: st
     return { status: "saved", message: "Revoked. What was granted is now revocation work." };
   } catch (err) {
     return formError(err);
+  }
+}
+
+// ACCESS-P0-21 — a role includes other roles or packages, and a simulation
+// shows what adding or removing it would do to one identity's access.
+export async function addIncludeAction(packageId: string, _prev: PackageFormState, formData: FormData): Promise<PackageFormState> {
+  const ctx = await requirePermission("access.manage");
+  try {
+    await addPackageInclude(ctx.tenantId!, ctx.userId, packageId, str(formData, "includedPackageId"));
+    refresh(packageId);
+    return { status: "saved", message: "Included. New assignments grant its contents too." };
+  } catch (err) {
+    return formError(err);
+  }
+}
+
+export async function removeIncludeAction(packageId: string, includedId: string, _prev: PackageFormState): Promise<PackageFormState> {
+  void _prev;
+  const ctx = await requirePermission("access.manage");
+  try {
+    await removePackageInclude(ctx.tenantId!, ctx.userId, packageId, includedId);
+    refresh(packageId);
+    return { status: "saved", message: "No longer included." };
+  } catch (err) {
+    return formError(err);
+  }
+}
+
+export type SimulationState =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "done"; action: "add" | "remove"; changes: string[]; unchanged: string[]; risk: string; eligibility: string | null; stale: boolean };
+
+export async function simulateAction(packageId: string, _prev: SimulationState, formData: FormData): Promise<SimulationState> {
+  const ctx = await requirePermission("access.manage");
+  try {
+    const action = formData.get("action") === "remove" ? "remove" : "add";
+    const r = await simulatePackageChange(ctx.tenantId!, packageId, str(formData, "identityId") ?? "", action);
+    return {
+      status: "done",
+      action,
+      changes: r.changes.map((c) => c.label),
+      unchanged: r.unchanged.map((c) => c.label),
+      risk: r.risk,
+      eligibility: action === "add" && !r.eligible.eligible ? r.eligible.reasons.join("; ") : action === "add" && r.holds ? "They already hold it." : null,
+      stale: !r.ledgerRefreshed,
+    };
+  } catch (err) {
+    const e = err as { message?: string };
+    return { status: "error", message: e?.message || "The simulation could not be run." };
   }
 }
