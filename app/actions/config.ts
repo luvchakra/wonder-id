@@ -5,7 +5,8 @@ import { requireAnyPermission } from "@/lib/rbac/requirePermission";
 import { ApiError } from "@/lib/shared/types/foundation";
 import { importConfigBundle, previewConfigBundle, restoreTenantConfigVersion, updateTenantConfig } from "@/lib/config/tenantConfig";
 import { CONFIG_SETTINGS, formatConfigValue, settingFor } from "@/lib/config/registry";
-import { readConfigBundle } from "@/lib/config/bundle";
+import { readConfigBundle, type ConfigBundle } from "@/lib/config/bundle";
+import { applyAttributePlan, attributePlanSize, planBundleAttributes, type AttributeImportPlan } from "@/modules/agent-identity/service";
 
 export type ConfigFormState = { ok: boolean; message: string | null; errors?: Record<string, string> };
 
@@ -55,7 +56,7 @@ export async function restoreConfigAction(_prev: ConfigFormState, formData: Form
 // change, then (with the same file) the import, which re-verifies it.
 export type BundleFormState =
   | { step: "idle" }
-  | { step: "preview"; text: string; source: string; exportedAt: string; changes: { label: string; from: string; to: string }[] }
+  | { step: "preview"; text: string; source: string; exportedAt: string; changes: { label: string; from: string; to: string }[]; notes: string[] }
   | { step: "done"; message: string }
   | { step: "error"; message: string };
 
@@ -63,6 +64,31 @@ async function bundleText(formData: FormData): Promise<string> {
   const file = formData.get("bundle");
   if (file && typeof file === "object" && "text" in file) return file.size > 64 * 1024 ? " ".repeat(64 * 1024 + 1) : await file.text();
   return String(formData.get("bundleText") ?? "");
+}
+
+// The bundle's identity attributes (version 2 files): planned against this
+// organization's, and changed only by someone who may manage identities.
+async function attributePlan(ctx: { tenantId: string; permissions: string[] }, bundle: ConfigBundle): Promise<{ ok: true; plan: AttributeImportPlan | null } | { ok: false; message: string }> {
+  if (!bundle.attributes) return { ok: true, plan: null };
+  try {
+    const plan = await planBundleAttributes(ctx.tenantId, bundle.attributes);
+    if (attributePlanSize(plan) && !ctx.permissions.includes("identity.manage")) {
+      return { ok: false, message: "This file changes identity attributes, which needs permission to manage identities. Nothing was imported." };
+    }
+    return { ok: true, plan };
+  } catch (err) {
+    if (err instanceof ApiError) return { ok: false, message: `${err.message} Nothing was imported.` };
+    throw err;
+  }
+}
+
+function attributeRows(plan: AttributeImportPlan | null): { label: string; from: string; to: string }[] {
+  if (!plan) return [];
+  return [
+    ...plan.add.map((a) => ({ label: `Attribute: ${a.displayName}`, from: "—", to: a.active ? "added" : "added, retired" })),
+    ...plan.activate.map((a) => ({ label: `Attribute: ${a.displayName}`, from: "retired", to: "active" })),
+    ...plan.retire.map((a) => ({ label: `Attribute: ${a.displayName}`, from: "active", to: "retired" })),
+  ];
 }
 
 export async function previewBundleAction(_prev: BundleFormState, formData: FormData): Promise<BundleFormState> {
@@ -73,12 +99,18 @@ export async function previewBundleAction(_prev: BundleFormState, formData: Form
   if (!read.ok) return { step: "error", message: read.message };
   const preview = await previewConfigBundle(ctx.tenantId, ctx, read.bundle);
   if (!preview.ok) return { step: "error", message: preview.errors ? `${preview.message} ${Object.entries(preview.errors).map(([k, v]) => `${settingFor(k)?.label ?? k}: ${v}`).join(" ")}` : preview.message };
+  const attributes = await attributePlan(ctx, read.bundle);
+  if (!attributes.ok) return { step: "error", message: attributes.message };
   return {
     step: "preview",
     text,
     source: [preview.source.organization, preview.source.environment].filter(Boolean).join(" · "),
     exportedAt: preview.exportedAt,
-    changes: preview.changes.map((c) => ({ label: settingFor(c.key)?.label ?? c.key, from: `${formatConfigValue(c.from, c.key)} ${settingFor(c.key)?.unit ?? ""}`.trim(), to: `${formatConfigValue(c.to, c.key)} ${settingFor(c.key)?.unit ?? ""}`.trim() })),
+    changes: [
+      ...preview.changes.map((c) => ({ label: settingFor(c.key)?.label ?? c.key, from: `${formatConfigValue(c.from, c.key)} ${settingFor(c.key)?.unit ?? ""}`.trim(), to: `${formatConfigValue(c.to, c.key)} ${settingFor(c.key)?.unit ?? ""}`.trim() })),
+      ...attributeRows(attributes.plan),
+    ],
+    notes: (attributes.plan?.differs ?? []).map((name) => `The attribute ${name} is defined differently here and is left as it is.`),
   };
 }
 
@@ -87,8 +119,22 @@ export async function importBundleAction(_prev: BundleFormState, formData: FormD
   if (!ctx.ok) return { step: "error", message: ctx.message };
   const read = readConfigBundle(String(formData.get("bundleText") ?? ""));
   if (!read.ok) return { step: "error", message: read.message };
+  // Attributes are planned (and checked) before anything is saved.
+  const attributes = await attributePlan(ctx, read.bundle);
+  if (!attributes.ok) return { step: "error", message: attributes.message };
   const result = await importConfigBundle(ctx.tenantId, ctx, read.bundle);
   if (!result.ok) return { step: "error", message: result.errors ? `${result.message} ${Object.values(result.errors)[0]}` : result.message };
+  const settingsDone = result.changes.length ? `Settings imported as version ${result.version} (${result.changes.length === 1 ? "1 change" : `${result.changes.length} changes`}).` : "";
+  let attributesDone = 0;
+  if (attributes.plan && attributePlanSize(attributes.plan)) {
+    try {
+      attributesDone = await applyAttributePlan(ctx.tenantId, ctx.userId, attributes.plan);
+    } catch (err) {
+      revalidatePath("/", "layout");
+      return { step: "error", message: [settingsDone, err instanceof Error ? err.message : "The attributes could not be imported."].filter(Boolean).join(" ") };
+    }
+  }
   revalidatePath("/", "layout");
-  return { step: "done", message: result.changes.length ? `Imported as version ${result.version}. ${result.changes.length === 1 ? "1 setting" : `${result.changes.length} settings`} changed.` : "This organization already has these settings. Nothing changed." };
+  const parts = [settingsDone, attributesDone ? `${attributesDone === 1 ? "1 attribute change" : `${attributesDone} attribute changes`} applied.` : ""].filter(Boolean);
+  return { step: "done", message: parts.length ? parts.join(" ") : "This organization already has this configuration. Nothing changed." };
 }

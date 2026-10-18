@@ -52,6 +52,7 @@ test.describe.serial("global configuration", () => {
     const bundle = await res.json();
     expect(bundle.format).toBe("wonderid-config-bundle");
     expect(bundle.signature).toMatch(/^[0-9a-f]{64}$/);
+    expect(Array.isArray(bundle.attributes)).toBe(true);
 
     await page.goto("/settings/configuration");
     const box = page.getByTestId("config-bundle");
@@ -61,10 +62,15 @@ test.describe.serial("global configuration", () => {
       await box.getByRole("button", { name: "Preview" }).click();
     };
     await upload(bundle);
-    await expect(box.getByText("This organization already has these settings.")).toBeVisible();
+    await expect(box.getByText("This organization already has this configuration.")).toBeVisible();
 
     const dormant = bundle.settings["access.dormantDays"] === 30 ? 60 : 30;
     await upload({ ...bundle, settings: { ...bundle.settings, "access.dormantDays": dormant } });
+    await expect(box.getByText(/changed after it was exported/)).toBeVisible();
+
+    // An attribute the file never had is an edit too.
+    const added = { identityType: null, name: "e2e_edited", displayName: "E2E edited", dataType: "string", required: false, sensitive: false, searchable: false, uniqueValue: false, allowedValues: [], validationRegex: null, sourceMapping: null, active: true };
+    await upload({ ...bundle, attributes: [...bundle.attributes, added] });
     await expect(box.getByText(/changed after it was exported/)).toBeVisible();
   });
 });

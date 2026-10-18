@@ -614,7 +614,7 @@ runs inside your organization and respects the viewer's permissions.
   - the mass-missing threshold;
   - the hourly limit on changes made by connections;
   - review defaults.
-- **Export and import:** settings tried in Dev or Test can be moved to another environment. Export downloads a signed file. Importing it elsewhere first lists every setting it would change, from and to, then saves them as a new version. A file edited after export is refused.
+- **Export and import:** settings and identity attributes tried in Dev or Test can be moved to another environment. Export downloads a signed file. Importing it elsewhere first lists every setting it would change, from and to, and every attribute it would add, restore or retire, then saves the settings as a new version. An attribute defined differently there is left as it is. A file edited after export is refused.
 
 **AI provider**
 - Choose OpenAI or Gemini, using WonderID's key or your own.
@@ -675,6 +675,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 18 Oct 2026 | Global Configuration export and import also carry identity attributes. |
 | 18 Oct 2026 | Nobody can merge their own person record, and merging two records with no shared email or name needs a reason. Automation credentials can't join groups. A vendor-console bootstrap address signed in by email must have been confirmed by a mailed link. |
 | 17 Oct 2026 | A person can let an AI agent act for them (or an agent for another agent), once the agent's owner approves; the Runtime Gateway holds any request made on someone's behalf without such a delegation. |
 | 17 Oct 2026 | Every change to a governance policy, including its separation of duties rules, is a new version; the policy's page shows its change history. |
