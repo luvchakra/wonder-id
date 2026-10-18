@@ -143,6 +143,10 @@ export {
   updatePackage,
   addPackageResource,
   removePackageResource,
+  listIncludedPackages,
+  addPackageInclude,
+  removePackageInclude,
+  simulatePackageChange,
   requestPackage,
   assignPackageDirect,
   setPackageBirthright,
@@ -157,6 +161,7 @@ export {
   sweepPackageExpiry,
   listLiveApplications,
   type AccessPackage,
+  type IncludedPackage,
   type PackageDetail,
   type PackageListItem,
   type PackageResource,
@@ -164,7 +169,7 @@ export {
   type AssignmentItem,
   type MoverReview,
 } from "./packages";
-export { checkEligibility as checkPackageEligibility, PACKAGE_IDENTITY_TYPES, CERTIFICATION_FREQUENCIES } from "./packageRules";
+export { checkEligibility as checkPackageEligibility, PACKAGE_IDENTITY_TYPES, CERTIFICATION_FREQUENCIES, PACKAGE_KINDS, type PackageKind, type RoleSimulation } from "./packageRules";
 // 2026-10-10 — CSV imports from the object pages (preview, then additive apply).
 export { previewAccessImport, applyAccessImport } from "./fileImport";
 export { ACCESS_IMPORT_KINDS, type AccessImportKind } from "./fileImportRules";

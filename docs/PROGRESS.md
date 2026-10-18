@@ -14,18 +14,18 @@ Generated 2026-10-18 from 11 module backlogs.
 
 ## Overall
 
-**238 of 277 tracked stories complete — 86%**
+**239 of 277 tracked stories complete — 86%**
 
 ```
-██████████████████████████████████░░░░░░  86%
+███████████████████████████████████░░░░░  86%
 ```
 
 | Status | Stories |
 |---|---|
-| Done | 238 |
+| Done | 239 |
 | Partial | 22 |
 | Deferred | 2 |
-| Not Started | 15 |
+| Not Started | 14 |
 | **Total tracked** | **277** |
 
 Beyond these, the backlogs list **53 P1** and **32 P2** forward-looking items.
@@ -41,10 +41,10 @@ and are deliberately excluded from the counts above.
 | 01 | [Foundation Agent](plan/01-FOUNDATION-AGENT-BACKLOG.md) | 43 | 2 | 0 | 2 | 47 | `████████████████░░` 91% |
 | 02 | [Identity Agent](plan/02-IDENTITY-AGENT-BACKLOG.md) | 20 | 0 | 0 | 1 | 21 | `█████████████████░` 95% |
 | 03 | [Integration Agent](plan/03-INTEGRATION-AGENT-BACKLOG.md) | 27 | 3 | 0 | 0 | 30 | `████████████████░░` 90% |
-| 04 | [Access Agent](plan/04-ACCESS-AGENT-BACKLOG.md) | 31 | 0 | 0 | 2 | 33 | `█████████████████░` 94% |
+| 04 | [Access Agent](plan/04-ACCESS-AGENT-BACKLOG.md) | 31 | 1 | 0 | 1 | 33 | `█████████████████░` 94% |
 | 05 | [Runtime Agent](plan/05-RUNTIME-AGENT-BACKLOG.md) | 13 | 0 | 0 | 0 | 13 | `██████████████████` 100% |
 | 06 | [Risk Agent](plan/06-RISK-AGENT-BACKLOG.md) | 14 | 2 | 0 | 0 | 16 | `████████████████░░` 88% |
-| 07 | [Compliance Agent](plan/07-COMPLIANCE-AGENT-BACKLOG.md) | 16 | 1 | 0 | 0 | 17 | `█████████████████░` 94% |
+| 07 | [Compliance Agent](plan/07-COMPLIANCE-AGENT-BACKLOG.md) | 17 | 0 | 0 | 0 | 17 | `██████████████████` 100% |
 | 08 | [Experience Agent](plan/08-EXPERIENCE-AGENT-BACKLOG.md) | 28 | 3 | 0 | 6 | 37 | `██████████████░░░░` 76% |
 | 09 | [Platform Agent](plan/09-PLATFORM-AGENT-BACKLOG.md) | 14 | 2 | 1 | 1 | 18 | `██████████████░░░░` 78% |
 | 10 | [Operations Agent](plan/10-OPERATIONS-AGENT-BACKLOG.md) | 11 | 1 | 0 | 2 | 14 | `██████████████░░░░` 79% |
@@ -183,7 +183,7 @@ and are deliberately excluded from the counts above.
 
 **Module:** Effective Access & Access Governance (the CAN side, plus policy)  
 **Backlog status:** DORMANT — do not start until the user says "Run Access Agent"  
-**Stories:** 31 done · 0 partial · 0 deferred · 2 not started (33 tracked) · 4 P1 / 3 P2 ahead
+**Stories:** 31 done · 1 partial · 0 deferred · 1 not started (33 tracked) · 4 P1 / 3 P2 ahead
 
 | Story | Title | Status |
 |---|---|---|
@@ -208,7 +208,7 @@ and are deliberately excluded from the counts above.
 | ACCESS-P0-18 | Self-service request catalog and request policies | Done — 2026-09-26, migration 0092 (packages with ACCESS-P0-20) |
 | ACCESS-P0-19 | Approval engine: multi-stage chains, approver scope, no self-approval | Done — 2026-09-26, migration 0093 (named groups deferred) |
 | ACCESS-P0-20 | Access packages | Done — 2026-09-26, migration 0094 (provisioning by INTEGRATION-P0-13; extension and package certification later). 2026-10-13: birthright, turned on by two administrators (0151); a mover's birthright packages they no longer qualify for go to a 14-day review, then are removed unless kept (0153, WID-H09) |
-| ACCESS-P0-21 | Business and IT roles | Not Started — 2026-09-26, WonderID |
+| ACCESS-P0-21 | Business and IT roles | Partial — 2026-10-18 (owner decision: a kind of access package; migration 0203): business and IT roles with owners, risk and requestability; a role includes other roles and packages (no loops), granted together on assignment; simulation of adding or removing one for an identity. SoD impact in the simulation waits on entitlement conflict rules (ACCESS-P0-22) |
 | ACCESS-P0-22 | Preventive SoD on entitlement combinations | Not Started — 2026-09-26, WonderID |
 | ACCESS-P0-23 | Delegations | Done — 2026-10-14: approval (0176), request (0177) and administration (0178) delegation. 2026-10-17 (0200, owner decisions): person→agent and agent→agent, approved by an owner of the agent, enforced at the Runtime Gateway (DELEGATION_REQUIRED → approval) |
 | ACCESS-P0-24 | Access ledger and provenance | Done — 2026-10-10, migration 0114 (role, lifecycle, emergency and legacy sources wait for those features; connectors' entitlements reach it once they are reconciled) |
@@ -272,7 +272,7 @@ and are deliberately excluded from the counts above.
 
 **Module:** Certification, Controls & Compliance  
 **Backlog status:** DORMANT — do not start until the user says "Run Compliance Agent"  
-**Stories:** 16 done · 1 partial · 0 deferred · 0 not started (17 tracked) · 4 P1 / 3 P2 ahead
+**Stories:** 17 done · 0 partial · 0 deferred · 0 not started (17 tracked) · 4 P1 / 3 P2 ahead
 
 | Story | Title | Status |
 |---|---|---|
@@ -289,7 +289,7 @@ and are deliberately excluded from the counts above.
 | COMPLIANCE-P0-07 | Governance Posture (composite score, distinct from risk) | Done — computed read-model across 12 dimensions, `getGovernancePosture()`, `GET /api/v1/compliance/agents/[id]/posture` |
 | COMPLIANCE-P0-08 | Governance Attestation (broad: approver/decision/evidence) | Done — `governance_attestations` table, `recordAttestation()`/`listAttestationsForAgent()`/`getLatestAttestation()`, `GET/POST /api/v1/compliance/agents/[id]/attestations` |
 | COMPLIANCE-P0-09 | Governance Evidence Pack assembly | Done — `assembleGovernanceEvidencePack()`; export handed to Operations' `OPERATIONS-P0-07` via `POST /api/v1/compliance/agents/[id]/evidence-pack` |
-| COMPLIANCE-P0-10 | Certification campaigns for every identity type | Partial — 2026-10-14 part 1 (0180, 0181): people's application access (human, external, service account); reviewer by manager, application owner or named; certify (never one's own) and revoke as an approved, verified removal. Part 2 (0184): defer (30 days), escalate (to the campaign's launcher) and exception (keep until a date, at most 90 days, then removed: Access's time-bound path, or the role's own end date). Part 3 (0193, 2026-10-15): owner reviews of access packages (scope `package_contents`: one item per package resource, reviewed by the package's owner; revoke removes it from the package). Part 4 (0196, 2026-10-15): owner reviews of applications (scope `application_contents`: one item per active, certifiable entitlement, reviewed by the entitlement's owner, else the application's business owner, else the named reviewer; revoke disables the entitlement). Part 5 (0199, 2026-10-17): the campaigns page's Calendar (open campaigns by the month they are due) and Analytics (completion, revoke rate, time to decide, outcomes, per scope, reviewer backlog), counted in the database. Left: owner reviews of business roles (wait on ACCESS-P0-21, not built) |
+| COMPLIANCE-P0-10 | Certification campaigns for every identity type | Done — 2026-10-18: business-role owner reviews come with ACCESS-P0-21 (roles are access packages, so the package owner review covers them). 2026-10-14 part 1 (0180, 0181): people's application access (human, external, service account); reviewer by manager, application owner or named; certify (never one's own) and revoke as an approved, verified removal. Part 2 (0184): defer (30 days), escalate (to the campaign's launcher) and exception (keep until a date, at most 90 days, then removed: Access's time-bound path, or the role's own end date). Part 3 (0193, 2026-10-15): owner reviews of access packages (scope `package_contents`: one item per package resource, reviewed by the package's owner; revoke removes it from the package). Part 4 (0196, 2026-10-15): owner reviews of applications (scope `application_contents`: one item per active, certifiable entitlement, reviewed by the entitlement's owner, else the application's business owner, else the named reviewer; revoke disables the entitlement). Part 5 (0199, 2026-10-17): the campaigns page's Calendar (open campaigns by the month they are due) and Analytics (completion, revoke rate, time to decide, outcomes, per scope, reviewer backlog), counted in the database. Left: owner reviews of business roles (wait on ACCESS-P0-21, not built) |
 | COMPLIANCE-P0-11 | Access certification of WonderID users' role assignments | Done — 2026-10-14 (0183): scope `role_assignments`, direct and group, privileged first or privileged only; manager or named reviewer, never one's own (409 `SELF_CERTIFICATION`); revoke through Foundation's `removeRole` / `removeGroupMember`; audit `compliance.access_certified` / `compliance.access_revoked`; isolation 5/5; E2E `role-reviews.spec.ts` |
 | COMPLIANCE-P0-12 | Privacy programme: GDPR / UK GDPR / DPDP / CCPA rights requests, consent, RoPA, retention, legal holds, breach register (2026-10-01 user request) | Done — 2026-10-01 (`0103`, `modules/privacy`, `/settings/privacy`, `/my-privacy`, `/api/v1/privacy/*`, daily `/api/cron/privacy`; 12 rule tests; live isolation proof 28/28) |
 | COMPLIANCE-P0-13 | Financial and privacy control frameworks (SOX ITGC, SOC 1, PCI DSS, GLBA, DORA, RBI, SEBI CSCRF, CERT-In, GDPR, DPDP) | Done — 2026-10-01 (`0105`, 10 frameworks / 55 controls; shown on `/audit/integrity`) |

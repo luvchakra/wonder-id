@@ -59,7 +59,7 @@ export default async function CampaignsPage({ searchParams }: { searchParams: Pr
         <option value="high_risk_agent">high_risk_agent</option>
         <option value="identity_access">people&apos;s access</option>
         <option value="role_assignments">WonderID roles</option>
-        <option value="package_contents">access packages (owner review)</option>
+        <option value="package_contents">access packages and business roles (owner review)</option>
         <option value="application_contents">applications (owner review)</option>
       </SelectField>
       <TextField label="Criticality filter" name="criticality" placeholder="e.g. high,critical" />
@@ -141,7 +141,7 @@ const SCOPE_LABEL: Record<string, string> = {
   high_risk_agent: "High-risk AI agents",
   identity_access: "People's access",
   role_assignments: "WonderID roles",
-  package_contents: "Access packages",
+  package_contents: "Access packages and roles",
   application_contents: "Applications (owner review)",
 };
 

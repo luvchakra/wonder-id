@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { assignmentExpiry, assignmentStatus, birthrightApplies, birthrightNeedsReapproval, birthrightTransition, checkEligibility, contentsDigest, itemOnEnd, keepRefusal, MOVER_REVIEW_DAYS, moverReviewAction, moverReviewDue, packageRisk, validatePackageInput } from "./packageRules";
+import { assignmentExpiry, flattenContents, includeRefusal, simulateRoleChange, assignmentStatus, birthrightApplies, birthrightNeedsReapproval, birthrightTransition, checkEligibility, contentsDigest, itemOnEnd, keepRefusal, MOVER_REVIEW_DAYS, moverReviewAction, moverReviewDue, packageRisk, validatePackageInput } from "./packageRules";
 
 describe("checkEligibility", () => {
   const pkg = { eligibleIdentityTypes: ["HUMAN"], eligibleDepartments: ["Finance"] };
@@ -137,5 +137,74 @@ describe("WID-H09: a mover review is decided by someone else (register, 13 Oct)"
     expect(keepRefusal("manager-1", "person-1")).toBeNull();
     // An administrator with no linked identity is not the person under review.
     expect(keepRefusal(null, "person-1")).toBeNull();
+  });
+});
+
+describe("ACCESS-P0-21: business and IT roles", () => {
+  const r = (applicationId: string, entitlementId: string | null = null) => ({ applicationId, entitlementId, id: `${applicationId}-${entitlementId}` });
+
+  it("a role grants its own contents, then what it includes, each once and with where it came from", () => {
+    const own = new Map([
+      ["role", [r("sap", "reporting")]],
+      ["it", [r("sap", "reporting"), r("vpn")]],
+      ["base", [r("email")]],
+    ]);
+    const includes = new Map([
+      ["role", ["it"]],
+      ["it", ["base"]],
+    ]);
+    const flat = flattenContents("role", own, includes);
+    expect(flat.map((x) => [`${x.applicationId}:${x.entitlementId}`, x.fromPackageId])).toEqual([
+      ["sap:reporting", null],
+      ["vpn:null", "it"],
+      ["email:null", "base"],
+    ]);
+  });
+
+  it("a cycle is cut rather than looping", () => {
+    const flat = flattenContents("a", new Map([["a", [r("x")]], ["b", [r("y")]]]), new Map([["a", ["b"]], ["b", ["a"]]]));
+    expect(flat.map((x) => x.applicationId)).toEqual(["x", "y"]);
+  });
+
+  it("refuses including itself, an inactive package, or one that already includes it", () => {
+    const includes = new Map([["b", ["c"]], ["c", ["a"]]]);
+    expect(includeRefusal("a", { id: "a", status: "active" }, includes)).toMatch(/itself/);
+    expect(includeRefusal("a", { id: "d", status: "draft" }, includes)).toMatch(/active/);
+    expect(includeRefusal("a", { id: "b", status: "active" }, includes)).toMatch(/loop/);
+    expect(includeRefusal("a", null, includes)).toMatch(/not in this organization/);
+    expect(includeRefusal("a", { id: "d", status: "active" }, includes)).toBeNull();
+  });
+
+  it("simulates adding: only access not already held is granted", () => {
+    const contents = [
+      { applicationId: "sap", entitlementId: "reporting", label: "SAP · Reporting", risk: "high" as const },
+      { applicationId: "vpn", entitlementId: null, label: "VPN", risk: "low" as const },
+    ];
+    const sim = simulateRoleChange("add", contents, [{ applicationId: "vpn", entitlementId: null, status: "VALID", accessPackageAssignmentId: null }], null);
+    expect(sim.changes.map((c) => c.label)).toEqual(["SAP · Reporting"]);
+    expect(sim.unchanged.map((c) => c.label)).toEqual(["VPN"]);
+    expect(sim.risk).toBe("high");
+    // Ended access does not count as held.
+    expect(simulateRoleChange("add", contents, [{ applicationId: "vpn", entitlementId: null, status: "REVOKED", accessPackageAssignmentId: null }], null).changes).toHaveLength(2);
+  });
+
+  it("simulates removing: access also held another way is kept", () => {
+    const contents = [
+      { applicationId: "sap", entitlementId: "reporting", label: "SAP · Reporting", risk: "high" as const },
+      { applicationId: "vpn", entitlementId: null, label: "VPN", risk: "low" as const },
+    ];
+    const entries = [
+      { applicationId: "sap", entitlementId: "reporting", status: "VALID", accessPackageAssignmentId: "asg1" },
+      { applicationId: "vpn", entitlementId: null, status: "VALID", accessPackageAssignmentId: "asg1" },
+      { applicationId: "vpn", entitlementId: null, status: "VALID", accessPackageAssignmentId: null },
+    ];
+    const sim = simulateRoleChange("remove", contents, entries, "asg1");
+    expect(sim.changes.map((c) => c.label)).toEqual(["SAP · Reporting"]);
+    expect(sim.unchanged.map((c) => c.label)).toEqual(["VPN"]);
+  });
+
+  it("accepts a kind and refuses an unknown one", () => {
+    expect(validatePackageInput({ name: "Finance analyst", kind: "business_role" }, false).kind).toBe("business_role");
+    expect(() => validatePackageInput({ name: "X", kind: "team" }, false)).toThrow(/kind/);
   });
 });

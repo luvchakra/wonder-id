@@ -1,9 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
+import type { SimulationState } from "@/app/actions/packages";
 import { Loader2 } from "lucide-react";
 import {
   addResourceAction,
+  addIncludeAction,
+  removeIncludeAction,
+  simulateAction,
   assignDirectAction,
   itemStatusAction,
   removeResourceAction,
@@ -44,6 +48,7 @@ function Submit({ pending, children, variant, size }: { pending: boolean; childr
 
 export type PackageDefaults = {
   name: string;
+  kind: string;
   description: string | null;
   ownerIdentityId: string | null;
   eligibleIdentityTypes: string[];
@@ -71,6 +76,11 @@ export function PackageForm({ packageId, defaults, people }: { packageId: string
   return (
     <form action={action} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <TextField label="Name" name="name" required maxLength={200} defaultValue={defaults.name} />
+      <SelectField label="Kind" name="kind" defaultValue={defaults.kind}>
+        <option value="package">Access package</option>
+        <option value="business_role">Business role</option>
+        <option value="it_role">IT role</option>
+      </SelectField>
       <SelectField label="Owner" name="ownerIdentityId" defaultValue={defaults.ownerIdentityId ?? ""} hint="Approves requests when the route includes the owner">
         <option value="">No owner yet</option>
         {people.map((p) => (
@@ -384,5 +394,101 @@ export function RevokeForm({ packageId, assignmentId }: { packageId: string; ass
         <Outcome state={state} />
       </div>
     </form>
+  );
+}
+
+// ACCESS-P0-21 — what a role includes, and the simulation.
+export function IncludeForm({ packageId, candidates }: { packageId: string; candidates: { id: string; label: string }[] }) {
+  const [state, action, pending] = useActionState(addIncludeAction.bind(null, packageId), IDLE);
+  if (!candidates.length) return <p className="text-sm text-muted-foreground">No other active role or package to include.</p>;
+  return (
+    <form action={action} className="flex flex-wrap items-end gap-2">
+      <div className="min-w-0 flex-1">
+        <SelectField label="Include a role or package" name="includedPackageId" defaultValue="" required>
+          <option value="" disabled>
+            Choose one
+          </option>
+          {candidates.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.label}
+            </option>
+          ))}
+        </SelectField>
+      </div>
+      <Submit pending={pending} variant="secondary">
+        Include
+      </Submit>
+      <Outcome state={state} />
+    </form>
+  );
+}
+
+export function RemoveInclude({ packageId, includedId, label }: { packageId: string; includedId: string; label: string }) {
+  const [state, action, pending] = useActionState(removeIncludeAction.bind(null, packageId, includedId), IDLE);
+  return (
+    <form action={action} className="flex flex-col items-end gap-1">
+      <Button type="submit" size="sm" variant="ghost" disabled={pending} aria-label={`Stop including ${label}`}>
+        {pending ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : null}
+        Remove
+      </Button>
+      {state.status === "error" ? <Outcome state={state} /> : null}
+    </form>
+  );
+}
+
+const SIM_IDLE: SimulationState = { status: "idle" };
+
+export function SimulateForm({ packageId, candidates }: { packageId: string; candidates: { id: string; label: string }[] }) {
+  const [state, action, pending] = useActionState(simulateAction.bind(null, packageId), SIM_IDLE);
+  return (
+    <div className="space-y-3">
+      {candidates.length ? (
+        <form action={action} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+          <SelectField label="Identity" name="identityId" defaultValue="" required>
+            <option value="" disabled>
+              Choose one
+            </option>
+            {candidates.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField label="Change" name="action" defaultValue="add">
+            <option value="add">Add it</option>
+            <option value="remove">Remove it</option>
+          </SelectField>
+          <Submit pending={pending} variant="secondary">
+            Simulate
+          </Submit>
+        </form>
+      ) : (
+        <p className="text-sm text-muted-foreground">Find someone above to simulate for.</p>
+      )}
+      {state.status === "error" ? <Outcome state={{ status: "error", message: state.message }} /> : null}
+      {state.status === "done" ? (
+        <div role="status" className="space-y-2 rounded-md border border-border p-3 text-sm" data-testid="role-simulation">
+          <p className="font-medium text-foreground">
+            {state.action === "add" ? (state.changes.length ? `Would grant ${state.changes.length}:` : "Would grant nothing new.") : state.changes.length ? `Would remove ${state.changes.length}:` : "Would remove nothing: they have all of it another way."}
+          </p>
+          {state.changes.length ? (
+            <ul className="list-disc pl-5 text-foreground">
+              {state.changes.map((c, i) => (
+                <li key={i}>{c}</li>
+              ))}
+            </ul>
+          ) : null}
+          {state.unchanged.length ? (
+            <p className="text-muted-foreground">
+              {state.action === "add" ? "Already has" : "Keeps, held another way"}: {state.unchanged.join(", ")}
+            </p>
+          ) : null}
+          {state.changes.length ? <p className="text-muted-foreground">Highest risk {state.action === "add" ? "added" : "removed"}: {state.risk}</p> : null}
+          {state.eligibility ? <p className="text-warning">{state.eligibility}</p> : null}
+          <p className="text-xs text-muted-foreground">Separation of duties between entitlements is not checked: no such rules exist yet. Nothing was changed.</p>
+          {state.stale ? <p className="text-xs text-warning">Their access could not be refreshed; this uses what was last recorded.</p> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

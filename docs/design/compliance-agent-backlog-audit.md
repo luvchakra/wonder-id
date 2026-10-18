@@ -1614,3 +1614,14 @@ Owner decision 2026-10-17: "go ahead with all the items … one by one".
 - Owner reviews of business roles; they wait on ACCESS-P0-21.
 - Periodic cadence still has no scheduler, so the calendar shows due
   dates, not future launches.
+
+## 2026-10-18 — COMPLIANCE-P0-10 Done: business-role owner reviews
+
+The last part waited on ACCESS-P0-21. Business and IT roles are now a kind
+of access package (owner decision, 18 Oct), so the package owner review
+(part 3) covers them: a role's owner reviews what the role itself contains,
+and what it includes is reviewed with the included role
+(`listPackagesForReview` filters inherited items). The campaign scope label
+reads "access packages and business roles". No compliance code changed
+beyond the labels; tests: `modules/certification-compliance` passes with
+the Access changes (part of the 464 above).

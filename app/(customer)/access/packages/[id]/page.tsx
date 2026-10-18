@@ -8,14 +8,30 @@ import {
   checkPackageEligibility,
   getPackage,
   listAssignments,
+  listIncludedPackages,
+  listPackages,
   listEntitlementsForApplication,
   listLiveApplications,
   sweepPackageExpiry,
 } from "@/modules/access-governance/service";
 import { getIdentityForUser, listAccountableHumans, listIdentities } from "@/modules/agent-identity/service";
 import { RecordProvenance, Badge, Card, CardBody, CardHeader, EmptyState, TableContainer, Td, Th, Thead, Tr, fieldInputClass, fieldLabelClass, Button } from "@/modules/ui";
-import { APPROVAL, ASSIGNMENT, ITEM, RISK_TONE, STATUS_TONE } from "../labels";
-import { AssignForm, BirthrightButton, ItemActions, KeepForm, PackageForm, PackageRequestForm, RemoveResource, ResourceForm, RevokeForm, StatusButtons } from "../PackageForms";
+import { APPROVAL, ASSIGNMENT, ITEM, KIND, RISK_TONE, STATUS_TONE } from "../labels";
+import {
+  AssignForm,
+  BirthrightButton,
+  IncludeForm,
+  ItemActions,
+  KeepForm,
+  PackageForm,
+  PackageRequestForm,
+  RemoveInclude,
+  RemoveResource,
+  ResourceForm,
+  RevokeForm,
+  SimulateForm,
+  StatusButtons,
+} from "../PackageForms";
 
 // ACCESS-P0-20 — one access package (spec §12.2): what it includes and how
 // risky that is; whether you are eligible and why; who will approve and
@@ -50,7 +66,7 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
   if (!canManage && (pkg.status !== "active" || !pkg.requestable || !myEligibility.eligible)) notFound();
 
   const selectedApp = canManage && sp.app ? sp.app : null;
-  const [assignments, found, owners, liveApps, appEntitlements] = await Promise.all([
+  const [assignments, found, owners, liveApps, appEntitlements, included, others] = await Promise.all([
     // Holders are visible to those who manage or fulfil access and to the package's owner; anyone else sees only their own.
     listAssignments(tenantId, {
       packageId: pkg.id,
@@ -62,7 +78,10 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
     canManage ? listAccountableHumans(tenantId) : Promise.resolve([]),
     canManage && pkg.status !== "retired" ? listLiveApplications(tenantId) : Promise.resolve([]),
     selectedApp ? listEntitlementsForApplication(tenantId, selectedApp) : Promise.resolve([]),
+    listIncludedPackages(tenantId, pkg.id),
+    canManage && pkg.status !== "retired" ? listPackages(tenantId, { status: "active", pageSize: 50 }) : Promise.resolve({ items: [], total: 0 }),
   ]);
+  const includeCandidates = others.items.filter((p) => p.id !== pkg.id && !included.some((i) => i.id === p.id)).map((p) => ({ id: p.id, label: `${p.name} (${KIND[p.kind] ?? p.kind})` }));
   const people = found.rows.filter((p) => p.id !== me?.id).map((p) => ({ id: p.id, label: `${p.displayName}${p.email ? ` (${p.email})` : ""}` }));
   const requestable = pkg.status === "active" && pkg.requestable && canRequest;
   const iHoldIt = assignments.rows.some((a) => a.identityId === me?.id && ["provisioning", "active", "partially_failed"].includes(a.status));
@@ -87,6 +106,11 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {pkg.kind !== "package" ? (
+            <Badge tone="info" className="whitespace-nowrap">
+              {KIND[pkg.kind]}
+            </Badge>
+          ) : null}
           <Badge tone={STATUS_TONE[pkg.status]} className="whitespace-nowrap">
             {pkg.status}
           </Badge>
@@ -110,13 +134,14 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
                         {r.entitlementName ?? "Application access"}
                         {r.privilegeLevel && r.privilegeLevel !== "standard" ? ` · ${r.privilegeLevel}` : ""}
                         {!r.applicationLive ? " · application no longer live" : ""}
+                        {r.fromPackageName ? ` · from ${r.fromPackageName}` : ""}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge tone={RISK_TONE[r.risk]} className="whitespace-nowrap">
                         {r.risk}
                       </Badge>
-                      {canManage && pkg.status !== "retired" ? <RemoveResource packageId={pkg.id} resourceId={r.id} label={`${r.applicationName} ${r.entitlementName ?? ""}`.trim()} /> : null}
+                      {canManage && pkg.status !== "retired" && !r.fromPackageId ? <RemoveResource packageId={pkg.id} resourceId={r.id} label={`${r.applicationName} ${r.entitlementName ?? ""}`.trim()} /> : null}
                     </div>
                   </li>
                 ))}
@@ -209,6 +234,27 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
                 </details>
               </Card>
             ) : null}
+            {pkg.status !== "retired" || included.length ? (
+              <Card>
+                <CardHeader title="Includes" description="Other roles and packages granted with this one. New assignments get their contents too." />
+                <CardBody className="space-y-3">
+                  {included.length ? (
+                    <ul className="divide-y divide-border">
+                      {included.map((i) => (
+                        <li key={i.id} className="flex items-center justify-between gap-2 py-1.5">
+                          <Link href={`/access/packages/${i.ref ?? i.id}`} className="min-w-0 truncate text-sm text-foreground hover:underline">
+                            {i.name}
+                            <span className="text-xs text-muted-foreground"> · {KIND[i.kind] ?? i.kind}{i.status !== "active" ? `, ${i.status} (grants nothing)` : ""}</span>
+                          </Link>
+                          {pkg.status !== "retired" ? <RemoveInclude packageId={pkg.id} includedId={i.id} label={i.name} /> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {pkg.status !== "retired" ? <IncludeForm packageId={pkg.id} candidates={includeCandidates} /> : null}
+                </CardBody>
+              </Card>
+            ) : null}
             {pkg.status !== "retired" ? (
               <Card>
                 <CardHeader title="Add to the package" />
@@ -217,6 +263,15 @@ export default async function PackagePage({ params, searchParams }: { params: Pr
                 </CardBody>
               </Card>
             ) : null}
+            <Card>
+              <details className="group p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-foreground">Simulate adding or removing</summary>
+                <p className="mt-2 text-xs text-muted-foreground">What it would grant or take away for one identity, from their recorded access. Nothing is changed.</p>
+                <div className="mt-3">
+                  <SimulateForm packageId={pkg.id} candidates={found.rows.map((p) => ({ id: p.id, label: `${p.displayName}${p.email ? ` (${p.email})` : ""}` }))} />
+                </div>
+              </details>
+            </Card>
             {pkg.status === "active" ? (
               <Card>
                 <CardHeader title="Assign directly" description="Without a request — for example to an AI agent. Audited." />

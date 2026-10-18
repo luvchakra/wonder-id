@@ -14,7 +14,8 @@ import { getTenantIdBySlug } from "./support/seedFinanceBotAccess";
  *   it is fixed;
  * - expiry and revocation turn granted items into revocation work;
  * - changing a package's contents invalidates waiting approvals;
- * - an access manager can assign a package directly, to an AI agent too.
+ * - an access manager can assign a package directly, to an AI agent too;
+ * - ACCESS-P0-21: a business role includes other roles and packages.
  * Other organizations and read-only roles see and change nothing.
  *
  * Setup without a product screen of its own (the requester's manager, an
@@ -242,6 +243,42 @@ test.describe.serial("access packages", () => {
     expect(rv.status).toBe("revoked");
     expect(rv.items.map((i) => i.status)).toEqual(["revoke_pending", "revoke_pending"]);
     expect((await request.post(`/api/v1/access/package-assignments/${ids.assignment}/revoke`, { data: { reason: "Moved to another team" } })).status()).toBe(409);
+  });
+
+  test("ACCESS-P0-21: a business role includes another; its assignment grants both; loops are refused; a simulation changes nothing", async ({ request, browser }) => {
+    const created = await request.post("/api/v1/access/packages", {
+      data: { name: `E2E Role Agents ${stamp}`, kind: "business_role", eligibleIdentityTypes: ["AI_AGENT"], requestable: false, ownerIdentityId: ids.readOnly },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const role = (await created.json()).data as { id: string; kind: string };
+    expect(role.kind).toBe("business_role");
+    expect((await request.post(`/api/v1/access/packages/${role.id}/resources`, { data: { applicationId: ids.app, entitlementId: ids.writer } })).status()).toBe(201);
+    expect((await ro.post(`/api/v1/access/packages/${role.id}/includes`, { data: { includedPackageId: ids.agentPkg } })).status()).toBe(403);
+    expect((await request.post(`/api/v1/access/packages/${role.id}/includes`, { data: { includedPackageId: ids.agentPkg } })).status()).toBe(201);
+    expect((await (await request.post(`/api/v1/access/packages/${role.id}/includes`, { data: { includedPackageId: role.id } })).json()).error.code).toBe("INCLUDE_REFUSED");
+    expect((await (await request.post(`/api/v1/access/packages/${ids.agentPkg}/includes`, { data: { includedPackageId: role.id } })).json()).error.code).toBe("INCLUDE_REFUSED");
+    expect((await request.patch(`/api/v1/access/packages/${role.id}`, { data: { status: "active" } })).status()).toBe(200);
+
+    const detail = (await (await request.get(`/api/v1/access/packages/${role.id}`)).json()).data as { resources: { entitlementId: string | null; fromPackageId: string | null }[] };
+    expect(detail.resources.map((r) => [r.entitlementId, r.fromPackageId])).toEqual([
+      [ids.writer, null],
+      [ids.reader, ids.agentPkg],
+    ]);
+
+    const sim = await request.post(`/api/v1/access/packages/${role.id}/simulate`, { data: { identityId: ids.agent, action: "add" } });
+    expect(sim.status(), await sim.text()).toBe(200);
+    expect(((await sim.json()).data.changes as unknown[]).length).toBe(2);
+    expect((await (await request.post(`/api/v1/access/packages/${role.id}/simulate`, { data: { identityId: ids.agent, action: "remove" } })).json()).error.code).toBe("NOT_ASSIGNED");
+    expect(await assignments(request, role.id)).toEqual([]);
+
+    const direct = await request.post(`/api/v1/access/packages/${role.id}/assignments`, { data: { identityId: ids.agent, justification: "Agent runs month-end reports", durationDays: 7 } });
+    expect(direct.status(), await direct.text()).toBe(201);
+    expect(((await direct.json()).data as Assignment).items.map((i) => i.entitlementName).sort()).toEqual(["Reader", "Writer"]);
+
+    const two = await browser.newContext({ storageState: authFile("adminTwo") });
+    expect((await two.request.post(`/api/v1/access/packages/${role.id}/includes`, { data: { includedPackageId: ids.pkg } })).status()).toBe(404);
+    expect((await two.request.post(`/api/v1/access/packages/${role.id}/simulate`, { data: { identityId: ids.agent, action: "add" } })).status()).toBe(404);
+    await two.close();
   });
 
   test("the package screens", async ({ page, browser }) => {

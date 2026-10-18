@@ -12,6 +12,9 @@ export const PACKAGE_IDENTITY_TYPES = ["HUMAN", "EXTERNAL", "MACHINE", "AI_AGENT
 export type PackageIdentityType = (typeof PACKAGE_IDENTITY_TYPES)[number];
 export const CERTIFICATION_FREQUENCIES = ["none", "quarterly", "semiannual", "annual"] as const;
 export const PACKAGE_STATUSES = ["draft", "active", "retired"] as const;
+/** ACCESS-P0-21 (owner decision 2026-10-18): business and IT roles are kinds of package. */
+export const PACKAGE_KINDS = ["package", "business_role", "it_role"] as const;
+export type PackageKind = (typeof PACKAGE_KINDS)[number];
 
 export type PackageEligibility = { eligibleIdentityTypes: string[]; eligibleDepartments: string[] };
 export type EligibilitySubject = { identityType: string; department: string | null; status: string };
@@ -103,6 +106,7 @@ export function validatePackageInput(input: Record<string, unknown>, partial: bo
     if (depts.length > 50 || depts.some((d) => d.length > 100)) fail("eligibleDepartments: at most 50 names of up to 100 characters");
     out.eligible_departments = depts;
   }
+  oneOf("kind", "kind", PACKAGE_KINDS);
   oneOf("approval", "approval", APPROVAL_ROUTES);
   oneOf("approvalMode", "approval_mode", APPROVAL_MODES);
   oneOf("onTimeout", "on_timeout", ON_TIMEOUT);
@@ -223,4 +227,89 @@ export function moverReviewDue(now: Date): string {
  */
 export function keepRefusal(actorIdentityId: string | null, assignmentIdentityId: string): "SELF_KEEP" | null {
   return actorIdentityId !== null && actorIdentityId === assignmentIdentityId ? "SELF_KEEP" : null;
+}
+
+// ---------------------------------------------------------------- ACCESS-P0-21
+
+type Contents = { applicationId: string; entitlementId: string | null };
+const contentKey = (c: Contents) => `${c.applicationId}:${c.entitlementId ?? ""}`;
+
+/**
+ * What a package grants: its own resources, then those of the active
+ * packages it includes (and theirs), each once. `includes` maps a package to
+ * the packages it includes; a cycle (refused by the database) is cut.
+ * Inherited resources carry the package they come from.
+ */
+export function flattenContents<R extends Contents>(
+  packageId: string,
+  own: Map<string, R[]>,
+  includes: Map<string, string[]>,
+): (R & { fromPackageId: string | null })[] {
+  const out: (R & { fromPackageId: string | null })[] = [];
+  const seen = new Set<string>();
+  const visited = new Set<string>();
+  const walk = (id: string, from: string | null) => {
+    if (visited.has(id)) return;
+    visited.add(id);
+    for (const r of own.get(id) ?? []) {
+      if (seen.has(contentKey(r))) continue;
+      seen.add(contentKey(r));
+      out.push({ ...r, fromPackageId: from });
+    }
+    for (const child of includes.get(id) ?? []) walk(child, child);
+  };
+  walk(packageId, null);
+  return out;
+}
+
+/** Why `includedId` cannot be added to `packageId`, or null. The database checks cycles again. */
+export function includeRefusal(packageId: string, included: { id: string; status: string } | null, includes: Map<string, string[]>): string | null {
+  if (!included) return "That role or package is not in this organization.";
+  if (included.id === packageId) return "A role cannot include itself.";
+  if (included.status !== "active") return "Only an active role or package can be included.";
+  const below = new Set<string>();
+  const stack = [included.id];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (below.has(id)) continue;
+    below.add(id);
+    stack.push(...(includes.get(id) ?? []));
+  }
+  if (below.has(packageId)) return "That would make a loop: it already includes this role.";
+  return null;
+}
+
+/** Access an identity holds as far as a simulation is concerned: anything not ended. */
+const LIVE_LEDGER = ["VALID", "UNPROVEN", "ROGUE", "LEGACY_EXCEPTION", "PENDING_RECONCILIATION"];
+
+export type SimulatedResource = Contents & { label: string; risk: RiskLevel };
+export type RoleSimulation = {
+  action: "add" | "remove";
+  /** Access the change would give or take away. */
+  changes: SimulatedResource[];
+  /** Access the identity keeps (adding: already has it; removing: has it another way). */
+  unchanged: SimulatedResource[];
+  risk: RiskLevel;
+};
+
+/**
+ * ACCESS-P0-21: what adding or removing a role would do to one identity's
+ * access, without doing it. `entries` is the identity's access ledger;
+ * `assignmentId` is its live assignment of the role (for a removal).
+ */
+export function simulateRoleChange(
+  action: "add" | "remove",
+  contents: SimulatedResource[],
+  entries: { applicationId: string; entitlementId: string | null; status: string; accessPackageAssignmentId: string | null }[],
+  assignmentId: string | null,
+): RoleSimulation {
+  const live = entries.filter((e) => LIVE_LEDGER.includes(e.status));
+  const changes: SimulatedResource[] = [];
+  const unchanged: SimulatedResource[] = [];
+  for (const c of contents) {
+    const held = live.filter((e) => e.applicationId === c.applicationId && (e.entitlementId ?? null) === c.entitlementId);
+    if (action === "add") (held.length ? unchanged : changes).push(c);
+    else (held.some((e) => e.accessPackageAssignmentId !== assignmentId) ? unchanged : changes).push(c);
+  }
+  return { action, changes, unchanged, risk: packageRisk(changes.map((c) => c.risk)) };
 }

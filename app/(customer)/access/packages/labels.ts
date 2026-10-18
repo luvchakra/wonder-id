@@ -18,3 +18,5 @@ export const ASSIGNMENT: Record<string, { label: string; tone: BadgeTone }> = {
   expired: { label: "Expired", tone: "neutral" },
   revoked: { label: "Revoked", tone: "neutral" },
 };
+// ACCESS-P0-21: business and IT roles are kinds of package.
+export const KIND: Record<string, string> = { package: "Access package", business_role: "Business role", it_role: "IT role" };
