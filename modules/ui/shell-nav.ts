@@ -178,6 +178,7 @@ export const SHELL_NAV: ShellNavItem[] = [
       link("Access Packages", "/access/packages", "Box", "access.read"),
       link("Entitlements", "/access/entitlements", "KeyRound", "access.read"),
       link("Request Policies", "/access/request-policies", "Scale", "access.manage"),
+      link("Approval Workflows", "/access/approval-workflows", "Workflow", "access.manage"),
     ],
   },
   {

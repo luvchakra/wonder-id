@@ -34,6 +34,8 @@ export type RequestPolicy = {
   approvalTimeoutDays: number;
   onTimeout: (typeof ON_TIMEOUT)[number];
   status: "active" | "inactive";
+  /** Approval workflows: when set, this workflow decides who approves, instead of `approval`. */
+  approvalWorkflowId?: string | null;
 };
 
 /** With no policy at all, nothing is requestable by default: someone must decide the terms. */
@@ -172,7 +174,7 @@ export function evaluateRequest(c: RequestContext): RequestDecision {
 
   const approval = needsApproval(c.policy, c.risk);
   checks.push({ check: "risk", result: `${c.risk} (approval required from ${c.policy.riskThreshold})` });
-  checks.push({ check: "approval", result: approval ? c.policy.approval : "automatic" });
+  checks.push({ check: "approval", result: approval ? (c.policy.approvalWorkflowId ? "approval workflow" : c.policy.approval) : "automatic" });
   return {
     ok: true,
     initialStatus: approval ? "pending" : "approved",
@@ -220,6 +222,12 @@ export function validatePolicyInput(input: Record<string, unknown>, partial = fa
   if (has("approvalMode")) {
     if (!(APPROVAL_MODES as readonly unknown[]).includes(input.approvalMode)) fail("approvalMode: sequential or parallel");
     out.approval_mode = input.approvalMode;
+  }
+  if (has("approvalWorkflowId")) {
+    const v = input.approvalWorkflowId;
+    if (v === null || v === "") out.approval_workflow_id = null;
+    else if (typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) out.approval_workflow_id = v;
+    else fail("approvalWorkflowId: an approval workflow, or empty for the built-in route");
   }
   if (has("onTimeout")) {
     if (!(ON_TIMEOUT as readonly unknown[]).includes(input.onTimeout)) fail("onTimeout: escalate or expire");

@@ -46,6 +46,7 @@ export const PROVENANCE_TABLES = [
   "access_package_assignments",
   "access_package_assignment_items",
   "access_package_includes",
+  "approval_workflows",
   "data_sources",
   "policies",
   "application_onboardings",

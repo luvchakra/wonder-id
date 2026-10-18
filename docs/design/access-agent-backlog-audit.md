@@ -4664,3 +4664,80 @@ pages; another organization sees nothing) plus `sod`, `request-catalog`,
 exceptions with owner, expiry and compensating control; ACCESS-P0-36's
 violation workflow and import guardrail. Rule targets (policy targets) are
 not applied to access rules: a rule covers every identity.
+
+## 2026-10-18 — ACCESS-P0-43: approval workflows (owner request)
+
+Owner request: administrators build approval flows of several levels, name
+them as patterns and reuse each pattern for many applications; and the
+access request feature is tested across scenarios.
+
+**Migration 0204** (applied to the dev project by the owner by hand, then
+read back: table, columns, constraints, triggers, RLS):
+- `approval_workflows`: name (unique per organization, ignoring case and
+  spaces), description, `levels` jsonb (1–6), status active or retired,
+  version, number (`ref`), provenance. Members read; the service writes.
+- `access_request_policies.approval_workflow_id`, a same-organization
+  foreign key.
+- `access_request_approvals.approver_group_id` (same-organization foreign
+  key to `groups`, set null on delete) and `stage_rule` (all or any). New
+  kinds `managers_manager`, `named_approver`, `group`; a group step names no
+  person; the open-step key includes the group.
+
+**Rules** (`approvalWorkflowRules.ts`, pure): a level has a name, up to five
+approvers (manager, manager's manager, resource owner, application owner, a
+named person, a group, access managers), all or any one, and an optional
+lowest risk. `levelsFor` keeps the levels for the request's risk;
+`approversForSubject` maps manager approvers to the resource owner for a
+non-human subject (as ACCESS-P0-31). `planWorkflowChain` (approvalRules.ts)
+resolves each approver as the built-in routes do (nobody approves their own
+access or a request they made; a missing, inactive or sign-in-less person,
+or a group gone or inactive, hands the step to access managers with the
+reason), asks each person once at their earliest level, and adds the
+access-manager review at critical risk.
+
+**Engine** (`approvals.ts`): a policy with a workflow builds its chain from
+it. A missing, retired or invalid workflow falls back to the strictest
+built-in route (§17.4: no policy is never permission). A group's member
+decides its step; an access manager decides it only when the group is gone.
+Someone who decided an earlier level cannot decide a group's level (409
+`ALREADY_DECIDED`). One approval in an "any" level skips its other steps.
+Group steps appear in the members' waiting list and notify the members.
+
+**Service** (`approvalWorkflows.ts`): list, get (with the policies using
+it), create and update. Named people must be active people of the
+organization who can sign in; groups must be active. An update is the next
+version, with an optimistic version check and the changes audited
+(`access.approval_workflow_created` / `_updated`); requests already waiting
+keep their chain. Retiring a workflow a policy uses is refused (409
+`WORKFLOW_IN_USE`); choosing a retired one is refused (409
+`WORKFLOW_RETIRED`); another organization's is 404.
+
+**UI and API:** Access › Approval Workflows (list; Actions › New workflow…
+with a level builder), the workflow's page at its number (levels, the
+policies using it, provenance, a folded edit form, retire or restore). The
+request policy form gets "Approval workflow"; the policies table links it.
+The request page names the group and "any one approves". API
+`/api/v1/access/approval-workflows` (GET, POST) and `/:id` (GET, PATCH).
+
+**Verified:**
+- `approvalWorkflowRules.test.ts` (14): validation, risk levels, non-human
+  mapping, the chain in order, any-one levels, dedupe, self and missing
+  approvers, group decisions, skipping. `approvalRules.test.ts` updated for
+  the stage rule now carried by every step. `modules/access-governance`,
+  `modules/ui`, `lib/refs`, `lib/provenance`: 59 files, 514 passed.
+- `tests/access/approval-workflows.sql`, live: 11 of 11 as expected
+  (numbering, level limits, unique name, cross-organization foreign key,
+  RLS read and no direct writes, other organization reads none).
+- Advisors after the migration: nothing new beyond the expected unused new
+  indexes.
+- E2E `tests/e2e/approval-workflows.spec.ts`: validation and permissions;
+  one workflow on two applications; manager then group in order, nobody out
+  of turn, no second vote; a risk-gated level; rejection at a middle level;
+  an entitlement's own any-one workflow skipping the other approver; an
+  edit applying to new requests only; retire rules; the pages; another
+  organization sees and uses none.
+- Typecheck and eslint on the changed files clean.
+
+**Left out:** conditions other than risk (department, application
+attribute) and per-level timeouts; the policy's own timeout still applies to
+each step. Recorded as possible follow-ups, not built.

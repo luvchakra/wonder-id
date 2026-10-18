@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { RequestPolicy, RiskLevel } from "./requestRules";
+import { approversForSubject, levelsFor, type WorkflowApprover, type WorkflowLevel } from "./approvalWorkflowRules";
 
 /**
  * ACCESS-P0-19 — the approval engine's rules, pure (#9, #15): who approves
@@ -19,7 +20,7 @@ import type { RequestPolicy, RiskLevel } from "./requestRules";
  *   privilege, duration, type and policy.
  */
 
-export type ApproverKind = "manager" | "entitlement_owner" | "application_owner" | "package_owner" | "access_managers";
+export type ApproverKind = "manager" | "managers_manager" | "entitlement_owner" | "application_owner" | "package_owner" | "named_approver" | "group" | "access_managers";
 export type StepStatus = "waiting" | "pending" | "approved" | "rejected" | "skipped" | "expired" | "invalidated";
 
 export type Person = { identityId: string; userId: string | null; active: boolean } | null;
@@ -30,6 +31,10 @@ export type PlannedStep = {
   approverIdentityId: string | null;
   approverUserId: string | null;
   reason: string | null;
+  /** Approval workflows: a step any member of this group may decide. */
+  approverGroupId?: string | null;
+  /** Approval workflows: whether every step of the stage must approve, or any one. */
+  stageRule?: "all" | "any";
 };
 
 export type ChainInput = {
@@ -48,15 +53,17 @@ export type ChainInput = {
   subjectUserId: string | null;
 };
 
-const LABEL: Record<Exclude<ApproverKind, "access_managers">, string> = {
+const LABEL: Record<Exclude<ApproverKind, "access_managers" | "group">, string> = {
   manager: "manager",
+  managers_manager: "manager's manager",
   entitlement_owner: "entitlement owner",
   application_owner: "application owner",
   package_owner: "package owner",
+  named_approver: "named approver",
 };
 
 /** One named approver, or access managers with the reason why. */
-function resolve(kind: Exclude<ApproverKind, "access_managers">, person: Person, c: ChainInput): Omit<PlannedStep, "stage"> {
+function resolve(kind: Exclude<ApproverKind, "access_managers" | "group">, person: Person, c: Pick<ChainInput, "requesterUserId" | "onBehalfOfUserId" | "subjectUserId">): Omit<PlannedStep, "stage"> {
   const label = LABEL[kind];
   const open = (reason: string): Omit<PlannedStep, "stage"> => ({ approverKind: "access_managers", approverIdentityId: person?.identityId ?? null, approverUserId: null, reason });
   if (!person) return open(`No ${label} is recorded: an access manager approves instead`);
@@ -89,19 +96,74 @@ export function planApprovalChain(c: ChainInput): PlannedStep[] {
     c.route === "manager_approval" ? [[manager()]] : c.route === "owner_approval" ? [[owner()]] : c.mode === "parallel" ? [[manager(), owner()]] : [[manager()], [owner()]];
   if (c.risk === "critical") stages.push([{ approverKind: "access_managers", approverIdentityId: null, approverUserId: null, reason: "Critical risk: an access manager reviews as well" }]);
 
-  // Ask each approver once, at the earliest stage that asks them.
+  return numberStages(stages.map((steps) => ({ steps, rule: "all" as const })));
+}
+
+/** Ask each approver once, at the earliest stage that asks them; number the stages that remain. */
+function numberStages(stages: { steps: Omit<PlannedStep, "stage">[]; rule: "all" | "any" }[]): PlannedStep[] {
   const seen = new Set<string>();
   const out: PlannedStep[] = [];
-  for (const steps of stages) {
+  for (const { steps, rule } of stages) {
     const kept = steps.filter((s) => {
-      const key = s.approverUserId ?? "access_managers";
+      const key = s.approverUserId ?? (s.approverKind === "group" ? `group:${s.approverGroupId}` : "access_managers");
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-    if (kept.length) out.push(...kept.map((s) => ({ ...s, stage: out.length ? out[out.length - 1].stage + 1 : 1 })));
+    if (!kept.length) continue;
+    const stage = out.length ? out[out.length - 1].stage + 1 : 1;
+    out.push(...kept.map((s) => ({ ...s, stage, stageRule: rule })));
   }
   return out;
+}
+
+export type WorkflowChainInput = Omit<ChainInput, "route" | "mode"> & {
+  levels: WorkflowLevel[];
+  subjectIdentityType: string;
+  managersManager: Person;
+  /** People a workflow names, resolved (absent: not found). */
+  people: Map<string, Person>;
+  /** Groups a workflow names that still exist and are active. */
+  liveGroups: Set<string>;
+};
+
+/**
+ * Approval workflows: the chain a workflow gives this request. Levels that
+ * apply at the request's risk run in order; each approver resolves as the
+ * built-in routes do (nobody approves their own access, a missing or
+ * inactive person hands the step to access managers). Critical risk still
+ * adds an access-manager review.
+ */
+export function planWorkflowChain(c: WorkflowChainInput): PlannedStep[] {
+  const owner = () =>
+    c.isPackage
+      ? resolve("package_owner", c.packageOwner ?? null, c)
+      : c.entitlementOwner
+        ? resolve("entitlement_owner", c.entitlementOwner, c)
+        : resolve("application_owner", c.applicationOwner, c);
+  const step = (a: WorkflowApprover): Omit<PlannedStep, "stage"> => {
+    switch (a.kind) {
+      case "manager":
+        return resolve("manager", c.manager, c);
+      case "managers_manager":
+        return resolve("managers_manager", c.managersManager, c);
+      case "resource_owner":
+        return owner();
+      case "application_owner":
+        return resolve("application_owner", c.applicationOwner, c);
+      case "person":
+        return resolve("named_approver", c.people.get(a.identityId) ?? null, c);
+      case "group":
+        return c.liveGroups.has(a.groupId)
+          ? { approverKind: "group", approverIdentityId: null, approverUserId: null, approverGroupId: a.groupId, reason: null }
+          : { approverKind: "access_managers", approverIdentityId: null, approverUserId: null, reason: "The workflow's group no longer exists or is not active: an access manager approves instead" };
+      case "access_managers":
+        return { approverKind: "access_managers", approverIdentityId: null, approverUserId: null, reason: null };
+    }
+  };
+  const stages = levelsFor(c.levels, c.risk).map((l) => ({ steps: approversForSubject(l.approvers, c.subjectIdentityType).map(step), rule: l.rule }));
+  if (c.risk === "critical") stages.push({ steps: [{ approverKind: "access_managers", approverIdentityId: null, approverUserId: null, reason: "Critical risk: an access manager reviews as well" }], rule: "all" });
+  return numberStages(stages);
 }
 
 export type FingerprintInput = {
@@ -144,8 +206,8 @@ export function chainOutcome(steps: StepState[]): { state: "rejected" } | { stat
 }
 
 /** ACCESS-P0-23: `actingFor` — the members whose approvals this member decides now, by delegation. */
-export type Actor = { userId: string; canApproveAsAccessManager: boolean; actingFor?: string[] };
-export type ActionableStep = { id: string; stage: number; status: StepStatus; approverKind: ApproverKind; approverUserId: string | null };
+export type Actor = { userId: string; canApproveAsAccessManager: boolean; actingFor?: string[]; groupIds?: string[] };
+export type ActionableStep = { id: string; stage: number; status: StepStatus; approverKind: ApproverKind; approverUserId: string | null; approverGroupId?: string | null };
 
 /**
  * The step this person may decide now, if any: a pending step of the
@@ -159,9 +221,17 @@ export function actionableStep(steps: ActionableStep[], stage: number, actor: Ac
     current.find((s) => s.approverUserId === actor.userId) ??
     // ACCESS-P0-23: a step naming someone whose approvals this member holds by delegation.
     current.find((s) => s.approverUserId !== null && (actor.actingFor ?? []).includes(s.approverUserId)) ??
-    (actor.canApproveAsAccessManager ? current.find((s) => s.approverKind === "access_managers") : undefined) ??
+    // Approval workflows: a step open to a group's members; a group gone hands it to access managers.
+    current.find((s) => s.approverKind === "group" && s.approverGroupId && (actor.groupIds ?? []).includes(s.approverGroupId)) ??
+    (actor.canApproveAsAccessManager ? current.find((s) => s.approverKind === "access_managers" || (s.approverKind === "group" && !s.approverGroupId)) : undefined) ??
     null
   );
+}
+
+/** Approval workflows: when one step of an "any" stage approves, the stage's other open steps are no longer needed. */
+export function stepsToSkipAfterApproval(steps: { id: string; stage: number; status: StepStatus; stageRule?: "all" | "any" }[], approved: { id: string; stage: number; stageRule?: "all" | "any" }): string[] {
+  if (approved.stageRule !== "any") return [];
+  return steps.filter((s) => s.stage === approved.stage && s.id !== approved.id && (s.status === "pending" || s.status === "waiting")).map((s) => s.id);
 }
 
 /** When a pending step runs out of time: escalate a named step once, else expire the request. */

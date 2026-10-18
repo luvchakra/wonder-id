@@ -779,6 +779,12 @@ Asked in chat, the owner decided:
 2. **PLATFORM-P0-13, Global Configuration import:** applies at once, with
    no second administrator, like policy and role edits (every import is
    previewed, versioned, audited and can be restored).
+3. **ACCESS-P0-21, business and IT roles:** a kind of access package.
+
+Owner request, the same day: approval workflows. An administrator builds
+approval patterns of several levels and reuses each across many
+applications; and the access request feature is tested across scenarios.
+Recorded as ACCESS-P0-43 (High), migration 0204.
 
 ## 2026-10-17 — Owner decisions on the open questions
 

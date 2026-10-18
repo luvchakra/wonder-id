@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/requirePermission";
-import { listApplicationsForMatching, listEntitlementsForApplication, listGovernanceChanges, listRequestPolicies } from "@/modules/access-governance/service";
+import { listApplicationsForMatching, listApprovalWorkflows, listEntitlementsForApplication, listGovernanceChanges, listRequestPolicies } from "@/modules/access-governance/service";
 import { listTenantMembersWithRoles } from "@/lib/rbac/roles";
 import { ApiError } from "@/lib/shared/types/foundation";
 import { Badge, Button, Card, CardBody, CardHeader, EmptyState, SelectField, TableContainer, Td, Th, Thead, Tr, ObjectActionsMenu } from "@/modules/ui";
@@ -26,13 +27,15 @@ export default async function RequestPoliciesPage({ searchParams }: { searchPara
   const tenantId = ctx.tenantId!;
   const canManage = ctx.permissions.includes("access.manage");
   const sp = await searchParams;
-  const [policies, apps, waiting, members] = await Promise.all([
+  const [policies, apps, waiting, members, workflows] = await Promise.all([
     listRequestPolicies(tenantId),
     canManage ? listApplicationsForMatching(tenantId) : Promise.resolve([]),
     // ACCESS-P0-35: changes waiting for a second person.
     canManage ? listGovernanceChanges(tenantId) : Promise.resolve([]),
     canManage ? listTenantMembersWithRoles(tenantId) : Promise.resolve([]),
+    listApprovalWorkflows(tenantId),
   ]);
+  const workflowName = new Map(workflows.map((w) => [w.id, w.name]));
   const who = (userId: string) => (userId === ctx.userId ? "you" : (members.find((m) => m.userId === userId)?.displayName ?? members.find((m) => m.userId === userId)?.email ?? "a former member"));
   const scopeName = (key: { applicationId: string | null; entitlementId: string | null }) =>
     policies.find((p) => p.applicationId === key.applicationId && p.entitlementId === key.entitlementId)?.name ?? (key.applicationId ? "A new application policy" : "The organization default");
@@ -127,8 +130,14 @@ export default async function RequestPoliciesPage({ searchParams }: { searchPara
                   <Td hideBelow="lg">{FOR_OTHERS[p.allowForOthers]}</Td>
                   <Td hideBelow="lg">{p.maxDurationDays ? `Up to ${p.maxDurationDays} days` : "No limit"}</Td>
                   <Td hideBelow="xl">
-                    {APPROVAL[p.approval]}
-                    {p.approval === "manager_and_owner" ? <span className="block text-xs text-muted-foreground">{p.approvalMode === "parallel" ? "at the same time" : "in order"}</span> : null}
+                    {p.approvalWorkflowId ? (
+                      <Link href={`/access/approval-workflows/${p.approvalWorkflowId}`} className="text-primary hover:underline">
+                        {workflowName.get(p.approvalWorkflowId) ?? "Approval workflow"}
+                      </Link>
+                    ) : (
+                      APPROVAL[p.approval]
+                    )}
+                    {!p.approvalWorkflowId && p.approval === "manager_and_owner" ? <span className="block text-xs text-muted-foreground">{p.approvalMode === "parallel" ? "at the same time" : "in order"}</span> : null}
                     <span className="block text-xs text-muted-foreground">
                       {p.approvalTimeoutDays} days each, then {p.onTimeout === "escalate" ? "escalate" : "expire"}
                     </span>
@@ -165,7 +174,7 @@ export default async function RequestPoliciesPage({ searchParams }: { searchPara
                 Choose
               </Button>
             </form>
-            <PolicyForm key={selectedApp?.id ?? "default"} applicationId={selectedApp?.id ?? null} entitlements={entitlements.map((e) => ({ id: e.id, name: e.name }))} defaults={defaults} />
+            <PolicyForm key={selectedApp?.id ?? "default"} applicationId={selectedApp?.id ?? null} entitlements={entitlements.map((e) => ({ id: e.id, name: e.name }))} defaults={defaults} workflows={workflows.filter((w) => w.status === "active").map((w) => ({ id: w.id, name: w.name }))} />
           </CardBody>
         </Card>
       ) : null}

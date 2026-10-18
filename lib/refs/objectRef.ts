@@ -18,6 +18,7 @@ export const REF_TABLES = [
   "entitlement_classification_rules",
   "application_onboarding_templates",
   "access_packages",
+  "approval_workflows",
   "access_requests",
   "certification_campaigns",
   "certification_consultations",

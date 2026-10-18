@@ -319,6 +319,13 @@ An AI assistant can **propose** an onboarding configuration; a person always rev
   - how long access may last;
   - whether a reason is required.
 - Nobody can approve a request they made, or one that is for them.
+- **Approval workflows:** an approval pattern defined once and used by the policies of as many applications as follow it (Access → Approval Workflows → Actions → New workflow…).
+  - A workflow has up to six levels, run in order. Each level names up to five approvers: the manager, the manager's manager, the owner of what is requested, the application owner, a named person, a group (any one member approves) or access managers.
+  - A level is decided by all its approvers, or by any one of them; once one approves, the others are no longer asked.
+  - A level can apply only from a risk upwards, for example a security review for high and critical risk.
+  - A rejection at any level rejects the request. Someone who approved an earlier level can't approve a group's level as well.
+  - For a service account or an AI agent, the owner of what is requested approves where a level asks for a manager.
+  - A change applies to new requests at once, as the workflow's next version; requests already waiting keep their approvers. A workflow a policy uses can't be retired.
 - **Changing a policy:** in an organization with two or more Tenant Administrators, a change to a request policy waits, showing each field's old and new value, until someone else who manages access approves it (Request policies → Waiting for approval). Approved, it applies as the policy's next version; rejected, nothing changes. With one administrator a change applies at once. Every applied change is kept as a numbered version.
 - Approvers get a message with a link straight to the request when it reaches them.
 - **Away?** Hand your approvals or your requests to a colleague until a date (Approvals → Delegate your approvals). They act on your behalf, every decision records both of you, and either of you (or an access manager) can end it.
@@ -682,6 +689,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 18 Oct 2026 | Approval workflows: reusable approval patterns with several levels (manager, manager's manager, owners, a named person, a group, access managers), all or any one per level, levels by risk; a request policy chooses one, so many applications share it. |
 | 18 Oct 2026 | Separation of duties over access: rules on access one identity must not hold together, checked at request, assignment and approval; identities already holding both are listed. |
 | 18 Oct 2026 | Business and IT roles: a kind of access package that can include other roles, with a simulation of adding or removing one. Owner reviews cover roles too. |
 | 18 Oct 2026 | Global Configuration export and import also carry identity attributes. |

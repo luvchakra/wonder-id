@@ -43,6 +43,9 @@ const KIND: Record<string, string> = {
   entitlement_owner: "Entitlement owner",
   application_owner: "Application owner",
   package_owner: "Package owner",
+  managers_manager: "Manager's manager",
+  named_approver: "Named approver",
+  group: "Any member of",
   access_managers: "Any access manager",
 };
 const RISK_TONE: Record<string, BadgeTone> = { low: "neutral", medium: "info", high: "warning", critical: "danger" };
@@ -56,6 +59,8 @@ function Step({ s }: { s: ApprovalView }) {
           <p className="text-sm font-medium text-foreground">
             {KIND[s.approverKind] ?? s.approverKind}
             {s.approverKind !== "access_managers" && s.approverName ? <span className="font-normal text-muted-foreground"> · {s.approverName}</span> : null}
+            {s.approverKind === "group" ? <span className="font-normal text-muted-foreground"> {s.approverGroupName ?? "a group no longer there"}</span> : null}
+            {s.stageRule === "any" ? <span className="font-normal text-muted-foreground"> · any one approves</span> : null}
           </p>
           {s.reason ? <p className="mt-0.5 text-xs text-muted-foreground">{s.reason}</p> : null}
         </div>

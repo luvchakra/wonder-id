@@ -16,7 +16,9 @@ import {
   chainOutcome,
   dueAt,
   planApprovalChain,
+  planWorkflowChain,
   routeForSubject,
+  stepsToSkipAfterApproval,
   timeoutAction,
   type ApproverKind,
   type Person,
@@ -25,6 +27,7 @@ import {
 import { pendRequest } from "./pendingGrants";
 import { notifyApprovers } from "./approvalLinks";
 import { approvalsActingFor } from "./delegations";
+import { validateWorkflowLevels, namedReferences, type WorkflowLevel } from "./approvalWorkflowRules";
 
 /**
  * ACCESS-P0-19 — the approval engine for requests made through the
@@ -40,10 +43,10 @@ import { approvalsActingFor } from "./delegations";
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const KIND_ORDER: ApproverKind[] = ["manager", "entitlement_owner", "application_owner", "package_owner", "access_managers"];
+const KIND_ORDER: ApproverKind[] = ["manager", "managers_manager", "entitlement_owner", "application_owner", "package_owner", "named_approver", "group", "access_managers"];
 const LIVE: StepStatus[] = ["waiting", "pending", "approved", "rejected", "skipped", "expired"];
 /** With the policy gone, the strictest route applies: fail safe, never looser. */
-const FALLBACK_POLICY = { id: null, approval: "manager_and_owner", approvalMode: "sequential", approvalTimeoutDays: 5, onTimeout: "escalate", updatedAt: null } as const;
+const FALLBACK_POLICY = { id: null, approval: "manager_and_owner", approvalMode: "sequential", approvalTimeoutDays: 5, onTimeout: "escalate", updatedAt: null, workflow: null } as const;
 
 export type ApprovalStep = {
   id: string;
@@ -52,6 +55,9 @@ export type ApprovalStep = {
   approverKind: ApproverKind;
   approverIdentityId: string | null;
   approverUserId: string | null;
+  /** Approval workflows: a step any member of this group decides. */
+  approverGroupId: string | null;
+  stageRule: "all" | "any";
   reason: string | null;
   status: StepStatus;
   actionFingerprint: string;
@@ -72,6 +78,8 @@ function toStep(r: Record<string, unknown>): ApprovalStep {
     approverKind: r.approver_kind as ApproverKind,
     approverIdentityId: (r.approver_identity_id as string | null) ?? null,
     approverUserId: (r.approver_user_id as string | null) ?? null,
+    approverGroupId: (r.approver_group_id as string | null) ?? null,
+    stageRule: r.stage_rule === "any" ? "any" : "all",
     reason: (r.reason as string | null) ?? null,
     status: r.status as StepStatus,
     actionFingerprint: r.action_fingerprint as string,
@@ -86,24 +94,47 @@ function toStep(r: Record<string, unknown>): ApprovalStep {
 }
 
 type RequestRow = Record<string, unknown> & { id: string; tenant_id: string; status: string; requested_by: string; requested_on_behalf_of?: string | null; subject_identity_id: string | null };
-type PolicyTerms = { id: string | null; approval: RequestPolicy["approval"]; approvalMode: RequestPolicy["approvalMode"]; approvalTimeoutDays: number; onTimeout: RequestPolicy["onTimeout"]; updatedAt: string | null };
+type PolicyTerms = {
+  id: string | null;
+  approval: RequestPolicy["approval"];
+  approvalMode: RequestPolicy["approvalMode"];
+  approvalTimeoutDays: number;
+  onTimeout: RequestPolicy["onTimeout"];
+  updatedAt: string | null;
+  /** Approval workflows: the workflow the policy names, read now. */
+  workflow: { id: string; version: number; levels: WorkflowLevel[] } | null;
+};
 
 async function loadPolicyTerms(tenantId: string, policyId: string | null, packageId?: string | null): Promise<PolicyTerms> {
   // ACCESS-P0-20: a package request follows the package's own policy.
   if (packageId) {
     const { terms } = await loadPackageForApproval(tenantId, packageId);
-    return { id: null, ...terms };
+    return { id: null, ...terms, workflow: null };
   }
   if (!policyId) return FALLBACK_POLICY;
   const { data, error } = await supabaseServiceRole()
     .from("access_request_policies")
-    .select("id, approval, approval_mode, approval_timeout_days, on_timeout, updated_at")
+    .select("id, approval, approval_mode, approval_timeout_days, on_timeout, updated_at, approval_workflow_id")
     .eq("tenant_id", tenantId)
     .eq("id", policyId)
     .maybeSingle();
   if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
   if (!data) return FALLBACK_POLICY;
+  // Approval workflows: a policy that names one is approved by it. A workflow that cannot be read
+  // or is no longer valid is never permission: the strictest built-in route applies instead.
+  let workflow: PolicyTerms["workflow"] = null;
+  if (data.approval_workflow_id) {
+    const { data: wf, error: wfError } = await supabaseServiceRole().from("approval_workflows").select("id, tenant_id, version, levels, status").eq("tenant_id", tenantId).eq("id", data.approval_workflow_id as string).maybeSingle();
+    if (wfError) throw new ApiError(500, "QUERY_FAILED", wfError.message);
+    if (!wf || wf.tenant_id !== tenantId || wf.status !== "active") return { ...FALLBACK_POLICY, id: data.id as string, approvalTimeoutDays: data.approval_timeout_days as number, updatedAt: data.updated_at as string };
+    try {
+      workflow = { id: wf.id as string, version: wf.version as number, levels: validateWorkflowLevels(wf.levels) };
+    } catch {
+      return { ...FALLBACK_POLICY, id: data.id as string, approvalTimeoutDays: data.approval_timeout_days as number, updatedAt: data.updated_at as string };
+    }
+  }
   return {
+    workflow,
     id: data.id as string,
     approval: data.approval as PolicyTerms["approval"],
     approvalMode: data.approval_mode as PolicyTerms["approvalMode"],
@@ -179,6 +210,29 @@ async function readSteps(tenantId: string, requestId: string): Promise<ApprovalS
   return (data ?? []).map(toStep);
 }
 
+/** Approval workflows: the manager's manager, the named people and the live groups a workflow needs. */
+async function workflowPeople(tenantId: string, levels: WorkflowLevel[], managerId: string | null) {
+  const refs = namedReferences(levels);
+  const managerIdentity = managerId ? await getIdentity(tenantId, managerId) : null;
+  const [managersManager, people, groups] = await Promise.all([
+    person(tenantId, managerIdentity?.managerIdentityId ?? null),
+    Promise.all(refs.identityIds.map(async (id) => [id, await person(tenantId, id)] as const)),
+    refs.groupIds.length
+      ? supabaseServiceRole().from("groups").select("id, tenant_id, status").eq("tenant_id", tenantId).in("id", refs.groupIds)
+      : Promise.resolve({ data: [] as { id: string; tenant_id: string; status: string }[], error: null }),
+  ]);
+  if (groups.error) throw new ApiError(500, "QUERY_FAILED", groups.error.message);
+  const liveGroups = new Set((groups.data ?? []).filter((g) => g.tenant_id === tenantId && g.status === "active").map((g) => g.id as string));
+  return { managersManager, people: new Map(people), liveGroups };
+}
+
+/** The active groups a member belongs to, in this tenant (approval workflows). */
+async function memberGroupIds(tenantId: string, userId: string): Promise<string[]> {
+  const { data, error } = await supabaseServiceRole().from("group_members").select("group_id, tenant_id, groups!inner(status)").eq("tenant_id", tenantId).eq("user_id", userId).limit(500);
+  if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  return ((data ?? []) as unknown as { group_id: string; tenant_id: string; groups: { status: string } }[]).filter((m) => m.tenant_id === tenantId && m.groups?.status === "active").map((m) => m.group_id);
+}
+
 /**
  * Builds the chain for a waiting request under its current terms: resolves
  * the approvers, opens stage 1 and records the fingerprint. Runs as the
@@ -199,9 +253,7 @@ async function buildChain(tenantId: string, req: RequestRow, now: Date): Promise
     person(tenantId, matter.applicationOwnerId),
     person(tenantId, matter.packageOwnerId),
   ]);
-  const plan = planApprovalChain({
-    route: routeForSubject(terms.approval, subject.identityType),
-    mode: terms.approvalMode,
+  const common = {
     risk: matter.risk,
     manager,
     entitlementOwner,
@@ -211,7 +263,10 @@ async function buildChain(tenantId: string, req: RequestRow, now: Date): Promise
     requesterUserId: req.requested_by,
     onBehalfOfUserId: (req.requested_on_behalf_of as string | null | undefined) ?? null,
     subjectUserId: subject.userId,
-  });
+  };
+  const plan = terms.workflow
+    ? planWorkflowChain({ ...common, levels: terms.workflow.levels, subjectIdentityType: subject.identityType, ...(await workflowPeople(tenantId, terms.workflow.levels, managerId)) })
+    : planApprovalChain({ ...common, route: routeForSubject(terms.approval, subject.identityType), mode: terms.approvalMode });
   const fingerprint = fingerprintOf(tenantId, req, matter, terms.id);
   const due = dueAt(now, terms.approvalTimeoutDays);
   const admin = supabaseServiceRole();
@@ -223,6 +278,8 @@ async function buildChain(tenantId: string, req: RequestRow, now: Date): Promise
       approver_kind: s.approverKind,
       approver_identity_id: s.approverIdentityId,
       approver_user_id: s.approverUserId,
+      approver_group_id: s.approverGroupId ?? null,
+      stage_rule: s.stageRule ?? "all",
       reason: s.reason,
       status: s.stage === 1 ? "pending" : "waiting",
       action_fingerprint: fingerprint,
@@ -371,14 +428,18 @@ export async function decideApprovalStep(
   const outcome = chainOutcome(steps);
   if (outcome.state !== "open") throw new ApiError(409, "INVALID_TRANSITION", "The approval chain is already complete");
   // ACCESS-P0-23: whose approvals this member also holds now, by delegation.
-  const actingFor = await approvalsActingFor(tenantId, actor.userId);
-  const step = actionableStep(steps, outcome.stage, { ...actor, actingFor });
+  const [actingFor, groupIds] = await Promise.all([approvalsActingFor(tenantId, actor.userId), memberGroupIds(tenantId, actor.userId)]);
+  const step = actionableStep(steps, outcome.stage, { ...actor, actingFor, groupIds });
   const onBehalfOf = step && step.approverUserId && step.approverUserId !== actor.userId ? step.approverUserId : null;
   if (!step) throw new ApiError(403, "NOT_AN_APPROVER", "You are not an approver of this request at its current stage");
   // An access-manager review is a second pair of eyes: not someone who
   // already approved an earlier stage of this request.
   if (step.approverKind === "access_managers" && step.approverUserId === null && steps.some((s) => s.decidedBy === actor.userId)) {
     throw new ApiError(409, "ALREADY_DECIDED", "You already decided an earlier stage of this request; another access manager must review it");
+  }
+  // Approval workflows: a group's level is someone else's look too, not a second vote by an earlier approver.
+  if (step.approverKind === "group" && steps.some((s) => s.decidedBy === actor.userId)) {
+    throw new ApiError(409, "ALREADY_DECIDED", "You already decided an earlier level of this request; another member of the group must decide this one");
   }
 
   // ACCESS-P0-22: what the identity holds may have changed since the request was made (another request
@@ -433,6 +494,12 @@ export async function decideApprovalStep(
     // WID-H07: the comment stays on the approval step (access_request_approvals.comment).
     typedText: { comment: note },
   });
+
+  // Approval workflows: one approval decides an "any one" level; its other open steps are skipped.
+  if (decision === "approved") {
+    const skip = stepsToSkipAfterApproval(steps, { id: step.id, stage: step.stage, stageRule: (steps.find((x) => x.id === step.id) as ApprovalStep | undefined)?.stageRule });
+    if (skip.length) await admin.from("access_request_approvals").update({ status: "skipped" }).eq("tenant_id", tenantId).in("id", skip).in("status", ["pending", "waiting"]);
+  }
 
   // Advance the chain from what is stored now.
   const after = (await readSteps(tenantId, requestId)).filter((s) => LIVE.includes(s.status));
@@ -503,6 +570,7 @@ export async function sweepApprovalTimeouts(tenantId: string | null, now = new D
         .update({
           approver_kind: "access_managers",
           approver_user_id: null,
+          approver_group_id: null,
           escalated_at: now.toISOString(),
           due_at: dueAt(now, terms.approvalTimeoutDays),
           reason: `No decision within ${terms.approvalTimeoutDays} day${terms.approvalTimeoutDays === 1 ? "" : "s"}: escalated to access managers`,
@@ -527,7 +595,7 @@ export async function sweepApprovalTimeouts(tenantId: string | null, now = new D
   return { escalated, expired };
 }
 
-export type ApprovalView = ApprovalStep & { approverName: string | null; decidedByName: string | null };
+export type ApprovalView = ApprovalStep & { approverName: string | null; decidedByName: string | null; approverGroupName: string | null };
 
 /** A request with its approval chain (all steps, including invalidated ones, for the record). */
 export async function getRequestWithApprovals(tenantId: string, requestId: string): Promise<{ request: AccessRequest; steps: ApprovalView[]; subjectName: string | null; applicationName: string | null; entitlementName: string | null; packageName: string | null } | null> {
@@ -547,10 +615,13 @@ export async function getRequestWithApprovals(tenantId: string, requestId: strin
     Promise.all(deciders.map(async (u) => [u, await getIdentityForUser(tenantId, u)] as const)),
   ]);
   const deciderName = new Map(deciderIdentities.map(([u, i]) => [u, i?.displayName ?? null]));
+  const groupIds = [...new Set(steps.map((s) => s.approverGroupId).filter((g): g is string => Boolean(g)))];
+  const { data: groupRows } = groupIds.length ? await supabase.from("groups").select("id, name").eq("tenant_id", tenantId).in("id", groupIds) : { data: [] as { id: string; name: string }[] };
+  const groupName = new Map((groupRows ?? []).map((g) => [g.id as string, g.name as string]));
   const app = req.applications as { name: string; display_name: string | null } | null;
   return {
     request: toAccessRequest(req),
-    steps: steps.map((s) => ({ ...s, approverName: s.approverIdentityId ? (names.get(s.approverIdentityId)?.displayName ?? null) : null, decidedByName: s.decidedBy ? (deciderName.get(s.decidedBy) ?? null) : null })),
+    steps: steps.map((s) => ({ ...s, approverName: s.approverIdentityId ? (names.get(s.approverIdentityId)?.displayName ?? null) : null, decidedByName: s.decidedBy ? (deciderName.get(s.decidedBy) ?? null) : null, approverGroupName: s.approverGroupId ? (groupName.get(s.approverGroupId) ?? null) : null })),
     subjectName: req.subject_identity_id ? (names.get(req.subject_identity_id)?.displayName ?? null) : null,
     applicationName: app ? (app.display_name ?? app.name) : null,
     entitlementName: (req.entitlements as { name: string } | null)?.name ?? null,
@@ -562,9 +633,13 @@ export async function getRequestWithApprovals(tenantId: string, requestId: strin
 export async function listRequestIdsAwaiting(tenantId: string, actor: { userId: string; canApproveAsAccessManager: boolean }): Promise<string[]> {
   const supabase = await supabaseServer();
   // ACCESS-P0-23: and the steps of those whose approvals this member holds by delegation.
-  const named = [actor.userId, ...(await approvalsActingFor(tenantId, actor.userId))].filter((id) => UUID_RE.test(id));
+  const [acting, groups] = await Promise.all([approvalsActingFor(tenantId, actor.userId), memberGroupIds(tenantId, actor.userId)]);
+  const named = [actor.userId, ...acting].filter((id) => UUID_RE.test(id));
+  const groupIds = groups.filter((id) => UUID_RE.test(id));
   let query = supabase.from("access_request_approvals").select("request_id, approver_kind, approver_user_id, access_requests!inner(status, requested_by, requested_on_behalf_of)").eq("tenant_id", tenantId).eq("status", "pending");
-  query = actor.canApproveAsAccessManager ? query.or(`approver_user_id.in.(${named.join(",")}),approver_kind.eq.access_managers`) : query.in("approver_user_id", named);
+  // Approval workflows: and the steps open to a group they belong to.
+  const clauses = [`approver_user_id.in.(${named.join(",")})`, ...(groupIds.length ? [`approver_group_id.in.(${groupIds.join(",")})`] : []), ...(actor.canApproveAsAccessManager ? ["approver_kind.eq.access_managers"] : [])];
+  query = query.or(clauses.join(","));
   const { data, error } = await query.limit(500);
   if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
   const rows = (data ?? []).filter((r) => {
@@ -572,13 +647,13 @@ export async function listRequestIdsAwaiting(tenantId: string, actor: { userId: 
     return ar.status === "pending" && ar.requested_by !== actor.userId && ar.requested_on_behalf_of !== actor.userId;
   });
   // An open access-manager review is not theirs where they decided an earlier stage.
-  const openReviews = [...new Set(rows.filter((r) => r.approver_kind === "access_managers").map((r) => r.request_id as string))];
+  const openReviews = [...new Set(rows.filter((r) => r.approver_kind === "access_managers" || r.approver_kind === "group").map((r) => r.request_id as string))];
   const { data: decided, error: decidedError } = openReviews.length
     ? await supabase.from("access_request_approvals").select("request_id").eq("tenant_id", tenantId).eq("decided_by", actor.userId).neq("status", "invalidated").in("request_id", openReviews)
     : { data: [], error: null };
   if (decidedError) throw new ApiError(500, "QUERY_FAILED", decidedError.message);
   const already = new Set((decided ?? []).map((r) => r.request_id as string));
-  return [...new Set(rows.filter((r) => r.approver_kind !== "access_managers" || !already.has(r.request_id as string)).map((r) => r.request_id as string))];
+  return [...new Set(rows.filter((r) => (r.approver_kind !== "access_managers" && r.approver_kind !== "group") || !already.has(r.request_id as string)).map((r) => r.request_id as string))];
 }
 
 /**

@@ -43,6 +43,7 @@ import {
   Database,
   FileSearch,
   Gauge,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 
@@ -54,6 +55,7 @@ import {
  */
 const ICONS: Record<string, LucideIcon> = {
   Gauge,
+  Workflow,
   IdCard,
   Database,
   FileSearch,

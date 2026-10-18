@@ -4,7 +4,7 @@ What WonderID does today and what comes next, phase by phase. Built from the [kn
 
 ✅ done · 🔶 partly done · ⬜ not started · progress counts partly done as half
 
-**Overall: 65%** `██████░░░░`
+**Overall: 66%** `███████░░░`
 
 | # | Phase | Progress |
 |---|---|---|
@@ -55,6 +55,7 @@ What WonderID does today and what comes next, phase by phase. Built from the [kn
 
 - ✅ Request catalog and request policies
 - ✅ Approval engine
+- ✅ Approval workflows: reusable multi-level patterns
 - ✅ Access packages and birthright access
 - ✅ Time-bound access and extensions
 - ✅ Remove-access and account requests

@@ -26,13 +26,22 @@ function baseUrl(): string {
 }
 
 /** Notifies the approvers of the stage now open; access-manager steps reach every access manager. */
+/** The members of an active group, filtered by tenant (service role). */
+export async function groupMemberUsers(tenantId: string, groupId: string): Promise<string[]> {
+  const admin = supabaseServiceRole();
+  const { data: group } = await admin.from("groups").select("id, tenant_id, status").eq("tenant_id", tenantId).eq("id", groupId).maybeSingle();
+  if (!group || group.tenant_id !== tenantId || group.status !== "active") return [];
+  const { data } = await admin.from("group_members").select("user_id, tenant_id").eq("tenant_id", tenantId).eq("group_id", groupId).limit(500);
+  return (data ?? []).filter((m) => m.tenant_id === tenantId).map((m) => m.user_id as string);
+}
+
 export async function notifyApprovers(tenantId: string, requestId: string, stage: number): Promise<number> {
   try {
     const admin = supabaseServiceRole();
     const [{ data: steps }, { data: req }] = await Promise.all([
       admin
         .from("access_request_approvals")
-        .select("tenant_id, approver_kind, approver_user_id, status")
+        .select("tenant_id, approver_kind, approver_user_id, approver_group_id, status")
         .eq("tenant_id", tenantId)
         .eq("request_id", requestId)
         .eq("stage", stage)
@@ -52,7 +61,10 @@ export async function notifyApprovers(tenantId: string, requestId: string, stage
       if (s.approver_user_id) {
         users.add(s.approver_user_id as string);
         named.push(s.approver_user_id as string);
-      } else if (s.approver_kind === "access_managers") for (const u of await listPermissionHolders(tenantId, "access.approve")) users.add(u);
+      } else if (s.approver_kind === "group" && s.approver_group_id) {
+        // Approval workflows: every active member of the group hears of it.
+        for (const u of await groupMemberUsers(tenantId, s.approver_group_id as string)) users.add(u);
+      } else if (s.approver_kind === "access_managers" || s.approver_kind === "group") for (const u of await listPermissionHolders(tenantId, "access.approve")) users.add(u);
     }
     // ACCESS-P0-23: whoever holds a named approver's approvals by delegation hears too.
     for (const delegates of (await activeDelegatesOf(tenantId, named)).values()) for (const d of delegates) users.add(d);
