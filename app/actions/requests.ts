@@ -124,6 +124,8 @@ const POLICY_FIELDS = [
   "approvalTimeoutDays",
   "onTimeout",
   "status",
+  // Approval workflows: empty means the built-in route above.
+  "approvalWorkflowId",
 ] as const;
 const POLICY_FLAGS = ["requestable", "allowSelf", "justificationRequired", "autoApprove"] as const;
 

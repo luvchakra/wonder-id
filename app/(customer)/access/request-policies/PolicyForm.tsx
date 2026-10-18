@@ -26,16 +26,20 @@ export type PolicyDefaults = {
   approvalTimeoutDays: number;
   onTimeout: string;
   status: string;
+  approvalWorkflowId?: string | null;
 };
 
 export function PolicyForm({
   applicationId,
   entitlements,
   defaults,
+  workflows,
 }: {
   applicationId: string | null;
   entitlements: { id: string; name: string }[];
   defaults: PolicyDefaults;
+  /** Approval workflows: the active ones this organization has. */
+  workflows: { id: string; name: string }[];
 }) {
   const [state, action, pending] = useActionState(savePolicyAction, IDLE);
   const check = (name: string, label: string, on: boolean) => (
@@ -64,6 +68,14 @@ export function PolicyForm({
         <option value="managers">Their manager or an access manager</option>
         <option value="access_managers">Only access managers</option>
         <option value="none">Nobody (self only)</option>
+      </SelectField>
+      <SelectField label="Approval workflow" name="approvalWorkflowId" defaultValue={defaults.approvalWorkflowId ?? ""} hint="A workflow's levels replace the route below">
+        <option value="">None: use the approval route</option>
+        {workflows.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name}
+          </option>
+        ))}
       </SelectField>
       <SelectField label="Approval route" name="approval" defaultValue={defaults.approval}>
         <option value="manager_approval">Manager</option>

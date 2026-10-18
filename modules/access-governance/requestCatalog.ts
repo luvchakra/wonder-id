@@ -52,6 +52,7 @@ function toPolicy(r: Record<string, unknown>): RequestPolicy {
     approvalTimeoutDays: (r.approval_timeout_days as number | null) ?? 5,
     onTimeout: ((r.on_timeout as string | null) ?? "escalate") as RequestPolicy["onTimeout"],
     status: r.status as RequestPolicy["status"],
+    approvalWorkflowId: (r.approval_workflow_id as string | null) ?? null,
   };
 }
 
@@ -79,6 +80,14 @@ export type PendingPolicyChange = { id: string; objectId: string | null; changes
 
 type PolicyKey = { applicationId: string | null; entitlementId: string | null };
 
+/** Approval workflows: a policy may name only an active workflow of this organization. */
+async function assertActiveWorkflow(tenantId: string, workflowId: string): Promise<void> {
+  const { data, error } = await supabaseServiceRole().from("approval_workflows").select("id, tenant_id, status").eq("tenant_id", tenantId).eq("id", workflowId).maybeSingle();
+  if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  if (!data || data.tenant_id !== tenantId) throw new ApiError(404, "NOT_FOUND", "That approval workflow is not in this organization");
+  if (data.status !== "active") throw new ApiError(409, "WORKFLOW_RETIRED", "That approval workflow is retired");
+}
+
 async function existingPolicy(tenantId: string, key: PolicyKey): Promise<Record<string, unknown> | null> {
   let q = supabaseServiceRole().from("access_request_policies").select().eq("tenant_id", tenantId);
   q = key.applicationId ? q.eq("application_id", key.applicationId) : q.is("application_id", null);
@@ -103,6 +112,7 @@ export async function saveRequestPolicy(tenantId: string, actorId: string, input
   const key = { applicationId, entitlementId };
   const existing = await existingPolicy(tenantId, key);
   const fields = validatePolicyInput(input, Boolean(existing));
+  if (fields.approval_workflow_id) await assertActiveWorkflow(tenantId, fields.approval_workflow_id as string);
   if (!fourEyesRequired(await countActiveTenantAdministrators(tenantId))) {
     return { status: "applied", policy: await applyRequestPolicy(tenantId, actorId, key, fields, { createdBy: actorId }) };
   }
@@ -158,6 +168,8 @@ export async function applyRequestPolicy(
 ): Promise<RequestPolicy> {
   const admin = supabaseServiceRole();
   const existing = await existingPolicy(tenantId, key);
+  // Approval workflows: checked again when a waiting change is applied; it may have been retired meanwhile.
+  if (fields.approval_workflow_id) await assertActiveWorkflow(tenantId, fields.approval_workflow_id as string);
   if (opts.changeId && isStale(opts.baseVersion ?? null, (existing?.version as number | undefined) ?? null)) {
     throw new ApiError(409, "STALE_CHANGE", "The policy changed after this was proposed; reject it and propose again");
   }

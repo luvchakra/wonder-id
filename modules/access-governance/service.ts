@@ -226,3 +226,7 @@ export { entitlementRequestability } from "./requestRules";
 // ACCESS-P0-22 part 1: separation of duties over access combinations.
 export { addAccessConflictRule, listAccessConflictRules, listHeldAccessConflicts, checkAccessCombination, ACCESS_CONFLICT_ACTION, type HeldAccessConflict } from "./accessSod";
 export type { AccessConflictRule } from "./accessSodRules";
+
+// Approval workflows (owner request 2026-10-18): reusable approval patterns used by request policies.
+export { listApprovalWorkflows, getApprovalWorkflow, createApprovalWorkflow, updateApprovalWorkflow, type ApprovalWorkflow, type ApprovalWorkflowListItem } from "./approvalWorkflows";
+export { WORKFLOW_APPROVER_KINDS, APPROVER_LABEL, MAX_LEVELS, MAX_APPROVERS_PER_LEVEL, type WorkflowLevel, type WorkflowApprover } from "./approvalWorkflowRules";
