@@ -105,7 +105,7 @@ test.describe.serial("separation of duties over access", () => {
 
   test("the SoD pages show the rule and who already holds both; another organization sees neither", async ({ page, browser }) => {
     await page.goto("/sod");
-    await expect(page.getByRole("table", { name: "Access conflict rules" })).toContainText(`E2E SoD Access App ${stamp} · Create vendor`);
+    await expect(page.getByRole("region", { name: "Access conflict rules" })).toContainText(`E2E SoD Access App ${stamp} · Create vendor`);
     await page.goto("/sod/conflicts");
     const held = page.getByTestId("held-access-conflicts");
     await expect(held).toContainText(`E2E SoD R ${stamp}`);
