@@ -2310,3 +2310,32 @@ migration). Saviynt reference study D-6.
   their page.
 - Merging machine identities and AI agents (agents keep IDENTITY-P0-04's
   merge).
+
+## 2026-10-18 — WID-H11: no self-merge, a reason when records don't match
+
+The hourly audit's register raised WID-H11 on 17 Oct: one administrator
+could merge any two people's records, their own included. Owner decision
+(18 Oct): no second approver; the four-eyes gap is accepted.
+
+**Built:**
+- `mergeActorRefusal` (`identityMerge.ts`): a merge in which either record
+  is the actor's own identity is refused, 403 `SELF_DECISION`; two records
+  sharing no email and no name need a reason (400). The service audits the
+  refusal (`identity.merged`, failure).
+- Migration 0202: the 0198 function is renamed `merge_identities_unchecked`
+  and is executable by no API role; the new `merge_identities` (same
+  signature, `SECURITY DEFINER`, service role only) checks both rules
+  (42501, 22023) and then calls it.
+- The merge page shows the self-merge refusal instead of the form; the
+  reason field is required when the records don't match.
+
+**Verified:** `identityMerge.test.ts` (WID-H11, 2 cases) with `lib/rbac`
+and `getTenantContext.test.ts`: 10 files, 64 passed. Live
+`tests/identity/identity-merge-checks.sql` against the dev project: 8/8.
+Migration applied to the dev project; security advisors show no new item.
+`npm run typecheck` and eslint on the changed files clean.
+
+**Left out:** re-running SoD and eligibility for the survivor, and flagging
+merged-in access for the next review (the register's suggested actions,
+not its closure criteria). Merged-in rows are already listed in
+`identity_merges.moved`.

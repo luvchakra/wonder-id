@@ -252,11 +252,15 @@ export const getTenantContext = cache(async (): Promise<TenantContext> => {
   }
   // WID-H06 (owner decision 2026-10-12): an automation credential's call never
   // carries a human-only permission (approving access, certifying, managing
-  // credentials), whatever its roles say.
+  // credentials), whatever its roles say, and its power comes only from the
+  // roles given on its own page: a group's roles never reach it.
   const { getAutomationAccess } = await import("@/lib/security/automationCredentials");
   if (await getAutomationAccess()) {
     const { HUMAN_ONLY_PERMISSIONS } = await import("@/lib/security/automationCredentialRules");
-    for (let i = 0; i < grants.length; i++) grants[i] = { ...grants[i], permissions: grants[i].permissions.filter((k) => !HUMAN_ONLY_PERMISSIONS.includes(k)) };
+    for (let i = grants.length - 1; i >= 0; i--) {
+      if (grants[i].source === "GROUP") grants.splice(i, 1);
+      else grants[i] = { ...grants[i], permissions: grants[i].permissions.filter((k) => !HUMAN_ONLY_PERMISSIONS.includes(k)) };
+    }
   }
   const policies: AuthorizationPolicy[] = policyRows
     .filter((p) => p.tenant_id === tenantId)

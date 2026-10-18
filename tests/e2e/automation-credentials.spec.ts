@@ -204,6 +204,26 @@ test.describe.serial("automation credentials", () => {
     expect(copies).toBe(0);
   });
 
+  test("WID-H06: a credential never joins a group, so no group's roles reach it", async ({ page }) => {
+    const { data: cred } = await db().from("automation_credentials").select("backing_user_id").eq("id", credentialId).single();
+    const bot = cred!.backing_user_id as string;
+    const made = await page.request.post("/api/v1/groups", { data: { name: `E2E H06 Group ${Date.now()}` } });
+    expect(made.status(), await made.text()).toBe(201);
+    const groupId = (await made.json()).data.id as string;
+    try {
+      const add = await page.request.post(`/api/v1/groups/${groupId}/members`, { data: { userId: bot } });
+      expect(add.status()).toBe(409);
+      expect((await add.json()).error.code).toBe("AUTOMATION_MEMBER");
+      const { count } = await db().from("group_members").select("user_id", { count: "exact", head: true }).eq("group_id", groupId).eq("user_id", bot);
+      expect(count).toBe(0);
+      // The database refuses it for every writer, the service role included.
+      const direct = await db().from("group_members").insert({ group_id: groupId, tenant_id: tenantId, user_id: bot });
+      expect(direct.error?.code).toBe("23514");
+    } finally {
+      expect((await page.request.delete(`/api/v1/groups/${groupId}`)).status()).toBe(200);
+    }
+  });
+
   test("WID-H08: an address limit uses only the edge's address; spoofed headers never satisfy it", async ({ baseURL }) => {
     // Addresses from TEST-NET-3 (RFC 5737): no real caller has one.
     const SPOOFED = "203.0.113.7";

@@ -547,7 +547,7 @@ export type MergeRow = { column: string; label: string; keep: string | null; oth
  * The side-by-side choice: for each attribute that differs, keep this
  * record's value or take the other's. A blank here takes the other value.
  */
-export function MergeForm({ survivorId, mergedId, survivorName, otherName, rows, summary }: { survivorId: string; mergedId: string; survivorName: string; otherName: string; rows: MergeRow[]; summary: string }) {
+export function MergeForm({ survivorId, mergedId, survivorName, otherName, rows, summary, reasonRequired }: { survivorId: string; mergedId: string; survivorName: string; otherName: string; rows: MergeRow[]; summary: string; reasonRequired: boolean }) {
   const [state, action, pending] = useActionState(mergeIdentitiesAction.bind(null, survivorId, mergedId), IDLE);
   return (
     <form
@@ -601,7 +601,12 @@ export function MergeForm({ survivorId, mergedId, survivorName, otherName, rows,
       ) : (
         <p className="text-sm text-muted-foreground">The two records have the same details.</p>
       )}
-      <TextareaField label="Reason (optional)" name="reason" rows={2} maxLength={500} />
+      {/* WID-H11: records sharing no email or name need a reason. */}
+      {reasonRequired ? (
+        <TextareaField label="Why are these the same person?" name="reason" rows={2} maxLength={500} required />
+      ) : (
+        <TextareaField label="Reason (optional)" name="reason" rows={2} maxLength={500} />
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <Submit pending={pending} idle="Merge records" busy="Merging…" />
         <Result state={state} />

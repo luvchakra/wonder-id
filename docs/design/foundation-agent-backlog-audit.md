@@ -3707,3 +3707,33 @@ covered by `tests/e2e/mfa-required.spec.ts`:
 
 It passed on Vercel on 2026-10-17 in the access-unavailable run (121
 passed). No code changed. The tracker row is Done.
+
+## 2026-10-18 — WID-H06 group path and WID-H10 email proof
+
+Two open findings of the high-risk register, both in Foundation code.
+
+**WID-H06 (REOPENED 17 Oct: group membership as a second path to an
+automation credential's roles).**
+- `addGroupMember` and `addGroupMemberByRule` (`lib/users/groups.ts`) refuse
+  an automation member, 409 `AUTOMATION_MEMBER` (the manual path audits
+  the refusal).
+- Migration 0201: a trigger on `group_members` refuses an automation member
+  for every writer. Checked first: no automation member was in a group.
+- `getTenantContext` drops every GROUP grant on an automation call, so a
+  credential's power comes only from the roles on its own page.
+
+**WID-H10 (CHANGED 17 Oct: the bootstrap relied on "Confirm email" being
+on).** An `email` identity counts for the `PLATFORM_ADMIN_EMAILS` bootstrap
+only when Supabase mailed a confirmation and the address was confirmed
+after it (`confirmation_sent_at`, `mailedConfirmation` in
+`platformAdminEmails.ts`), whatever that project setting is.
+
+**Verified:** `platformAdminEmails.test.ts` (new case), `getTenantContext.test.ts`
+(2 new cases) and `lib/rbac`, with the identity merge tests: 10 files, 64
+passed. Live `tests/identity/identity-merge-checks.sql`: automation member
+into a group 23514, a person ok (8/8 overall). Migration applied to the dev
+project; no new advisor item. Typecheck and eslint clean.
+
+**Left out:** the E2E bootstrap describe stays skipped unless the run lists
+the IAM admin; when it is listed, that account now also needs a
+mail-confirmed address.

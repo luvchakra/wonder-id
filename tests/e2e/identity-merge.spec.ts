@@ -1,11 +1,14 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
-import { authFile } from "./support/testUsers";
+import { createClient } from "@supabase/supabase-js";
+import { authFile, TEST_USERS, TENANT_ONE } from "./support/testUsers";
+import { getTenantIdBySlug } from "./support/seedFinanceBotAccess";
 
 /**
  * IDENTITY-P0-23 — merging two records of the same person, against the real
  * app and database: the duplicate is suggested, the person picks per
  * attribute, the merge moves what the other record had and can be undone;
- * a read-only member and another organization cannot merge.
+ * a read-only member and another organization cannot merge, and nobody
+ * merges their own record (WID-H11).
  */
 
 const stamp = Date.now();
@@ -57,6 +60,20 @@ test.describe.serial("merging duplicate people", () => {
     await page.goto(`/identities/${keep.ref}`);
     await expect(page.getByTestId("identity-merges")).toHaveCount(0);
     await expect(page.getByText("Finance", { exact: true })).toBeVisible();
+  });
+
+  test("WID-H11: nobody merges their own record; records that don't match need a reason", async ({ page, request }) => {
+    const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
+    const tenantId = await getTenantIdBySlug(TENANT_ONE.slug);
+    const { data: me } = await db.from("users").select("id").eq("email", TEST_USERS.adminOne.email).single();
+    const { data: mine } = await db.from("identities").select("ref").eq("tenant_id", tenantId).eq("user_id", me!.id).single();
+    await page.goto(`/identities/${mine!.ref}/merge?with=${other.ref}`);
+    await expect(page.getByText("You can't merge your own record. Another administrator must do it.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Merge records" })).toHaveCount(0);
+
+    const stranger = await person(request, { displayName: `E2E Merge Stranger ${stamp}`, email: `e2e-merge-stranger-${stamp}@e2e.wonderagent.test` });
+    await page.goto(`/identities/${keep.ref}/merge?with=${stranger.ref}`);
+    await expect(page.getByLabel("Why are these the same person?")).toHaveAttribute("required", "");
   });
 
   test("a read-only member sees no merge link and cannot merge", async ({ browser }) => {

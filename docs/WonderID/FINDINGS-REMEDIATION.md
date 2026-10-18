@@ -25,7 +25,7 @@ request as each fix.
 **Status:** Not started, In progress, Partly fixed, Fixed (closure criteria
 met, with evidence), or Waiting on the owner.
 
-**Last updated:** 14 October 2026, 16:40 IST (WID-H10: owner's clarified decision implemented: vendor access only from `platform_admins`; the env variable only bootstraps the table)
+**Last updated:** 18 October 2026, 06:45 IST (WID-H06 group path closed; WID-H10 email-confirmation dependency removed; WID-H11 self-merge refused and a reason required, four-eyes gap accepted by the owner)
 
 ## Summary
 
@@ -39,11 +39,12 @@ met, with evidence), or Waiting on the owner.
 | WID-H03 Incomplete syncs | P2 | Fixed | None: the register confirmed it fixed (13 Oct, 09:06 IST); checksums wait for a system that offers one |
 | WID-H04 Rogue access provenance | P2 | Fixed | None: the register confirmed it fixed (13 Oct, 09:06 IST) |
 | WID-H05 Connector security | P2 | Fixed | None: the register confirmed it fixed (13 Oct, 13:07 IST) |
-| WID-H06 Automation credentials | P1 | Fixed, pending the register (register: REOPENED 14 Oct, 12:06 IST) | Done (14 Oct): no delegation of any scope names an automation member, in the service (409 `AUTOMATION_MEMBER`) and the database (migration 0182); negative tests on the API and in SQL. For the register to assess |
+| WID-H06 Automation credentials | P1 | Fixed, pending the register (register: REOPENED 17 Oct, 15:20 IST, group path) | Done (18 Oct): an automation member never joins a group (service 409 `AUTOMATION_MEMBER`, migration 0201 trigger) and a group's roles never reach an automation call (`getTenantContext`). Delegation fixed 14 Oct. For the register to assess |
 | WID-H07 Audit and erasure | P2 | Fixed | None: the register confirmed it fixed (13 Oct, 09:06 IST) |
 | WID-H08 Automation address allow-list | P1 | Fixed | None: the register confirmed it fixed, edge spoofing tested end to end (13 Oct, 09:06 IST) |
 | WID-H09 Access SoD and birthright | P1 (register: High) | Fixed | None: the register confirmed it fixed (13 Oct, 14:08 IST) |
-| WID-H10 Vendor console by listed email | P1 | Fixed, pending the register (register: OPEN) | Done (14 Oct): vendor access comes only from the audited `platform_admins` table. A `PLATFORM_ADMIN_EMAILS` address (proven-mailbox sign-ins only) opens only Platform Admins, to add an entry; its first use is platform-audited. For the register to assess |
+| WID-H10 Vendor console by listed email | P1 | Fixed, pending the register (register: CHANGED 17 Oct) | Done (18 Oct): an `email` sign-in counts for the bootstrap only after Supabase mailed a confirmation (`confirmation_sent_at`, confirmed after it), so the "Confirm email" setting no longer matters. For the register to assess |
+| WID-H11 Merging people's records | P1 | Fixed, pending the register (register: OPEN 17 Oct); four-eyes accepted by the owner | Done (18 Oct): nobody merges their own record (403 `SELF_DECISION`, service and migration 0202); records sharing no email or name need a reason. Second approver: owner accepted the gap (18 Oct). For the register to assess |
 
 ## Owner decisions
 
@@ -55,6 +56,7 @@ was chosen in the sheet "WonderID: decisions pending with the owner".
 
 | Date | Finding | Question | Decision | What it means for the work |
 |---|---|---|---|---|
+| 18 Oct 2026 | WID-H11 | Should a merge that moves accounts, access or a sign-in need a second administrator? | **No; the gap is accepted.** Refuse self-merges and require a stated reason when the records share no email or name. | Done: `mergeActorRefusal`, migration 0202. Revisit when an enterprise customer or auditor asks for maker/checker on identity merges. |
 | 13 Oct 2026 | WID-H09 | What happens to birthright packages a mover no longer qualifies for? | **A dated review, then automatic removal.** The person's manager gets a task to keep or remove each one; whatever is not kept by the deadline is removed. | Done: migration 0153; the mover event opens a 14-day review listed on the manager's task; Keep (`access.manage`) stops it; at the date the expiry sweep revokes the assignment through the normal removal path. E2E `birthright.spec.ts` "WID-H09". |
 | 13 Oct 2026 | WID-H09 | Access-combination SoD: correct the docs or build it? | **Docs now, build later.** | Done: the knowledge base describes the process SoD that exists and says access-combination SoD is not provided yet. Building it is a backlog story (ACCESS-P1). |
 | 13 Oct 2026 | Non-negotiable #15 (IDENTITY-P0-18) | How does a joiner or mover get birthright access? | **Pre-approved: assigned automatically.** Marking a package birthright takes two administrators (four-eyes), and that is the approval. | Done: migration 0151 (applied), `setPackageBirthright` / `assignBirthrightPackages`; a change to contents or eligibility needs approval again. |
@@ -670,6 +672,25 @@ and the four-eyes re-approval. Done:
 So the only path that writes `user_roles` for an automation member is the
 credential's own page (`assignAutomationCredentialRole`).
 
+**Reopened again for the group path, and fixed (18 October 2026).** The
+register (17 Oct, 15:20 IST) kept this reopened: a person with
+`groups.update` could add a credential's backing member to a group, and the
+credential would gain the group's roles. Done:
+- `addGroupMember` and `addGroupMemberByRule` refuse an automation member
+  (409 `AUTOMATION_MEMBER`; the manual path audits the refusal,
+  `lib/users/groups.ts`);
+- migration 0201: a trigger on `group_members` refuses an automation member
+  for every writer, the service role included. No automation member was in
+  a group in the dev project before it was applied;
+- `getTenantContext` drops every GROUP grant on an automation call, so even
+  a row written before 0201 adds nothing
+  (`getTenantContext.test.ts` "WID-H06", 2 cases: a person keeps the group's
+  roles, a credential does not);
+- live check `tests/identity/identity-merge-checks.sql` (shared with
+  WID-H11): an automation member joining a group 23514, a person ok.
+A credential's effective permissions now come only from roles given on its
+own page.
+
 ### WID-H07: audit and erasure (P2, fixed)
 
 **Done:** a SQL test of the audit trail's rules
@@ -891,3 +912,48 @@ bootstraps it.** Done:
   with the IAM admin listed: 24/24 with the organization specs.
 Removing an address from the variable still needs a redeploy, but it now
 only stops further grants: access itself is revoked in the table.
+
+**Email-confirmation dependency removed (18 October 2026).** The register
+(17 Oct, CHANGED) left one criterion open: an `email` identity proved the
+mailbox only while the project's "Confirm email" setting is on. Now an
+`email` identity counts for the bootstrap only when Supabase Auth mailed a
+confirmation (`confirmation_sent_at`) and the address was confirmed after
+it (`mailedConfirmation`, `platformAdminEmails.ts`). An auto-confirmed
+sign-up, or an account created already confirmed, has no mailed
+confirmation and is refused, whatever the setting. Google and LinkedIn are
+unchanged. Test: `platformAdminEmails.test.ts` "an email sign-in counts only
+after a mailed confirmation" (no mail, a mail after the confirmation:
+refused; mailed then confirmed, or Google: admitted). The E2E bootstrap
+describe now also needs the IAM admin's address to have been confirmed by
+mail (comment in `platform-admin.spec.ts`).
+
+### WID-H11: merging people's records (P1, fixed pending the register)
+
+The register raised this on 17 October (15:20 IST): one administrator with
+`identity.manage` could merge any two records, their own included, moving
+accounts, access and a sign-in, with no evidence that the two were the same
+person and no second approver.
+
+**Owner decision (18 October 2026):** no second approver; the four-eyes gap
+is accepted. Done:
+- nobody merges a record that is their own identity, as survivor or as the
+  merged record: 403 `SELF_DECISION` in the service (`mergeActorRefusal`,
+  `identityMerge.ts`, audited `identity.merged` failure) and in the
+  database (migration 0202: `merge_identities` checks, then calls the 0198
+  function, renamed `merge_identities_unchecked` and executable by no API
+  role, the service role included). The merge page shows the refusal
+  instead of the form;
+- two records that share no email and no name need a stated reason (400 in
+  the service, 22023 in the database); the form makes the reason required
+  then;
+- tests: `identityMerge.test.ts` "WID-H11" (2 cases); live
+  `tests/identity/identity-merge-checks.sql`, 8/8 (own record either side
+  42501; no match without reason 22023, with reason ok; same name ok;
+  unchecked function not executable).
+
+Merged-in access is already distinct from requested access: every row a
+merge moves is listed in its `identity_merges.moved` record (ledger rows
+included), and the `identity.merged` audit event carries the merge id. Not
+done: re-running SoD and eligibility for the survivor on merge, and
+flagging merged-in access for the next review (the register's suggested
+actions, not its closure criteria).

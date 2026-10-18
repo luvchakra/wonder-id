@@ -23,7 +23,7 @@
 
 [Revision history](#revision-history) is at the end, newest first.
 
-**Last updated:** 17 October 2026
+**Last updated:** 18 October 2026
 
 A plain-language guide to what WonderID does, how its parts fit together and where to find each feature. It is kept current as the product changes.
 
@@ -133,6 +133,7 @@ The everyday cycle looks like this:
   - History stays with the record it happened to.
   - **Undo the merge**, on either record, puts everything back; it needs a reason.
   - Two records that both sign in, hold the same package, have the same pending request or come from the same identity source can't be merged.
+  - Nobody can merge their own record; another administrator must do it. Two records that share no email and no name can be merged only with a stated reason.
 
 ---
 
@@ -674,6 +675,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 18 Oct 2026 | Nobody can merge their own person record, and merging two records with no shared email or name needs a reason. Automation credentials can't join groups. A vendor-console bootstrap address signed in by email must have been confirmed by a mailed link. |
 | 17 Oct 2026 | A person can let an AI agent act for them (or an agent for another agent), once the agent's owner approves; the Runtime Gateway holds any request made on someone's behalf without such a delegation. |
 | 17 Oct 2026 | Every change to a governance policy, including its separation of duties rules, is a new version; the policy's page shows its change history. |
 | 17 Oct 2026 | Global Configuration can be exported as a signed file and imported into another environment, with a preview of every change first. |

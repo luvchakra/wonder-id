@@ -4,7 +4,7 @@ import { requirePermission } from "@/lib/rbac/requirePermission";
 import { pageRef, resolveRef } from "@/lib/refs/objectRef";
 import { ApiError } from "@/lib/shared/types/foundation";
 import { Button, Card, EmptyState } from "@/modules/ui";
-import { findDuplicatesOf, getIdentity, getIdentityNames, getMergePreview, listIdentities, MERGE_FIELDS, mergeDifferences } from "@/modules/agent-identity/service";
+import { duplicateReason, findDuplicatesOf, getIdentity, getIdentityNames, getMergePreview, listIdentities, MERGE_FIELDS, mergeDifferences } from "@/modules/agent-identity/service";
 import { DirectorySearch, MergeForm, type MergeRow } from "../../IdentityForms";
 
 // IDENTITY-P0-23 — merge another record of the same person into this one.
@@ -69,10 +69,10 @@ export default async function MergeIdentityPage({ params, searchParams }: { para
         )}
       </div>
     );
-  } else if (preview.refusal) {
+  } else if (preview.refusal || [preview.survivor.userId, preview.merged.userId].includes(ctx.userId)) {
     body = (
       <p role="alert" className="text-sm text-destructive">
-        {preview.refusal}
+        {preview.refusal ?? "You can't merge your own record. Another administrator must do it."}
       </p>
     );
   } else {
@@ -94,7 +94,7 @@ export default async function MergeIdentityPage({ params, searchParams }: { para
     body = (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">{summary} History stays with the record it happened to.</p>
-        <MergeForm survivorId={survivor.id} mergedId={merged.id} survivorName={survivor.displayName} otherName={merged.displayName} rows={rows} summary={summary} />
+        <MergeForm survivorId={survivor.id} mergedId={merged.id} survivorName={survivor.displayName} otherName={merged.displayName} rows={rows} summary={summary} reasonRequired={!duplicateReason(survivor, merged)} />
       </div>
     );
   }

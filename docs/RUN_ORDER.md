@@ -769,6 +769,17 @@ RISK-P0-13 (rogue access remediation through approval and provisioning)
 stays Partial until the nightly E2E passes. Certification (COMPLIANCE-P0-10,
 -11, -14) and the other High items follow this list.
 
+## 2026-10-18 — Owner decisions
+
+Asked in chat, the owner decided:
+1. **WID-H11, identity merge:** no second administrator. Self-merges are
+   refused and two records sharing no email or name need a stated reason;
+   the four-eyes gap is accepted (recorded in
+   `docs/WonderID/FINDINGS-REMEDIATION.md`).
+2. **PLATFORM-P0-13, Global Configuration import:** applies at once, with
+   no second administrator, like policy and role edits (every import is
+   previewed, versioned, audited and can be restored).
+
 ## 2026-10-17 — Owner decisions on the open questions
 
 Asked in chat, the owner decided:

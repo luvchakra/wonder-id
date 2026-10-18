@@ -68,3 +68,24 @@ export function duplicateReason(identity: Pick<Identity, "id" | "displayName" | 
   if (norm(identity.displayName) && norm(identity.displayName) === norm(other.displayName)) return "name";
   return null;
 }
+
+/**
+ * WID-H11 (owner decision 2026-10-18): what a person must satisfy before
+ * merging, beyond `mergeRefusal`. Nobody merges their own record; two records
+ * that share no email and no name need a stated reason. Migration 0202
+ * checks both again.
+ */
+export function mergeActorRefusal(
+  actorId: string,
+  survivor: Pick<Identity, "id" | "userId" | "displayName" | "email">,
+  merged: Pick<Identity, "id" | "userId" | "displayName" | "email">,
+  reason: string | null,
+): ApiError | null {
+  if (survivor.userId === actorId || merged.userId === actorId) {
+    return new ApiError(403, "SELF_DECISION", "You can't merge your own record. Another administrator must do it.");
+  }
+  if (!reason?.trim() && !duplicateReason(survivor, merged)) {
+    return new ApiError(400, "VALIDATION_FAILED", "These records share no email or name. Say why they are the same person.");
+  }
+  return null;
+}
