@@ -18,9 +18,31 @@ import { CONFIG_SETTINGS, type ConfigValue, type TenantConfig } from "./registry
  */
 
 export const BUNDLE_FORMAT = "wonderid-config-bundle";
-const BUNDLE_VERSION = 1;
+// Version 2 adds the identity attributes; a version 1 file (settings only)
+// is still read.
+const BUNDLE_VERSION = 2;
+const READABLE_VERSIONS = [1, 2];
 
 export type BundleSource = { organization: string; environment: string | null };
+
+/** An identity attribute as the file carries it (IDENTITY-P0-16's definition, without ids). */
+export type BundleAttribute = {
+  identityType: string | null;
+  name: string;
+  displayName: string;
+  dataType: string;
+  required: boolean;
+  sensitive: boolean;
+  searchable: boolean;
+  uniqueValue: boolean;
+  allowedValues: string[];
+  validationRegex: string | null;
+  sourceMapping: string | null;
+  active: boolean;
+};
+
+const ATTRIBUTE_FIELDS = ["identityType", "name", "displayName", "dataType", "required", "sensitive", "searchable", "uniqueValue", "allowedValues", "validationRegex", "sourceMapping", "active"] as const satisfies readonly (keyof BundleAttribute)[];
+const MAX_ATTRIBUTES = 500;
 
 export type ConfigBundle = {
   format: typeof BUNDLE_FORMAT;
@@ -28,6 +50,8 @@ export type ConfigBundle = {
   exportedAt: string;
   source: BundleSource;
   settings: Record<string, ConfigValue>;
+  /** Version 2 and later. */
+  attributes?: BundleAttribute[];
   signature: string;
 };
 
@@ -38,20 +62,32 @@ function keys(): Buffer[] {
     .map((k) => createHash("sha256").update(`wonderid-config-bundle:${k}`, "utf8").digest());
 }
 
-/** The signed fields, in one fixed order, so the signature does not depend on key order. */
+const attributeKey = (a: Pick<BundleAttribute, "identityType" | "name">) => `${a.identityType ?? "*"}:${a.name}`;
+
+/** The signed fields, in one fixed order, so the signature does not depend on key or list order. */
 function canonical(b: Omit<ConfigBundle, "signature">): string {
   const settings = Object.fromEntries(Object.keys(b.settings).sort().map((k) => [k, b.settings[k]]));
-  return JSON.stringify([b.format, b.version, b.exportedAt, b.source.organization, b.source.environment, settings]);
+  const head = [b.format, b.version, b.exportedAt, b.source.organization, b.source.environment, settings];
+  if (b.version === 1) return JSON.stringify(head);
+  const attributes = [...(b.attributes ?? [])].sort((x, y) => attributeKey(x).localeCompare(attributeKey(y))).map((a) => ATTRIBUTE_FIELDS.map((f) => a[f]));
+  return JSON.stringify([...head, attributes]);
 }
 
 const sign = (key: Buffer, body: string) => createHmac("sha256", key).update(body, "utf8").digest("hex");
 
-/** The organization's settings as a signed bundle, or null when the server has no key to sign with. */
-export function exportConfigBundle(config: TenantConfig, source: BundleSource, now = new Date()): ConfigBundle | null {
+/** The organization's settings and identity attributes as a signed bundle, or null when the server has no key to sign with. */
+export function exportConfigBundle(config: TenantConfig, source: BundleSource, attributes: BundleAttribute[], now = new Date()): ConfigBundle | null {
   const [key] = keys();
   if (!key) return null;
   const settings = Object.fromEntries(CONFIG_SETTINGS.map((s) => [s.key, config[s.key as keyof TenantConfig] as ConfigValue]));
-  const body: Omit<ConfigBundle, "signature"> = { format: BUNDLE_FORMAT, version: BUNDLE_VERSION, exportedAt: now.toISOString(), source, settings };
+  const body: Omit<ConfigBundle, "signature"> = {
+    format: BUNDLE_FORMAT,
+    version: BUNDLE_VERSION,
+    exportedAt: now.toISOString(),
+    source,
+    settings,
+    attributes: attributes.map((a) => Object.fromEntries(ATTRIBUTE_FIELDS.map((f) => [f, a[f]])) as BundleAttribute),
+  };
   return { ...body, signature: sign(key, canonical(body)) };
 }
 
@@ -71,7 +107,7 @@ export function readConfigBundle(text: string): ReadBundleResult {
   }
   const b = raw as Partial<ConfigBundle> | null;
   if (!b || typeof b !== "object" || b.format !== BUNDLE_FORMAT) return { ok: false, message: "That file is not a WonderID configuration file." };
-  if (b.version !== BUNDLE_VERSION) return { ok: false, message: "That configuration file comes from a different version of WonderID." };
+  if (typeof b.version !== "number" || !READABLE_VERSIONS.includes(b.version)) return { ok: false, message: "That configuration file comes from a different version of WonderID." };
   if (
     typeof b.exportedAt !== "string" ||
     !b.source ||
@@ -81,12 +117,13 @@ export function readConfigBundle(text: string): ReadBundleResult {
     typeof b.settings !== "object" ||
     Array.isArray(b.settings) ||
     typeof b.signature !== "string" ||
-    !/^[0-9a-f]{64}$/.test(b.signature)
+    !/^[0-9a-f]{64}$/.test(b.signature) ||
+    (b.version >= 2 && !wellFormedAttributes(b.attributes))
   ) {
     return { ok: false, message: "That configuration file is incomplete." };
   }
   const bundle = b as ConfigBundle;
-  const body = canonical({ format: bundle.format, version: bundle.version, exportedAt: bundle.exportedAt, source: bundle.source, settings: bundle.settings });
+  const body = canonical({ format: bundle.format, version: bundle.version, exportedAt: bundle.exportedAt, source: bundle.source, settings: bundle.settings, attributes: bundle.attributes });
   const want = Buffer.from(bundle.signature, "hex");
   const all = keys();
   if (!all.length) return { ok: false, message: "This server cannot check configuration files. Nothing was imported." };
@@ -96,4 +133,23 @@ export function readConfigBundle(text: string): ReadBundleResult {
   });
   if (!valid) return { ok: false, message: "That configuration file was changed after it was exported, or comes from another WonderID. Nothing was imported." };
   return { ok: true, bundle };
+}
+
+/** Shape only; the Identity module validates each definition before anything is imported. */
+function wellFormedAttributes(list: unknown): list is BundleAttribute[] {
+  if (!Array.isArray(list) || list.length > MAX_ATTRIBUTES) return false;
+  return list.every(
+    (a) =>
+      !!a &&
+      typeof a === "object" &&
+      (a.identityType === null || typeof a.identityType === "string") &&
+      typeof a.name === "string" &&
+      typeof a.displayName === "string" &&
+      typeof a.dataType === "string" &&
+      ["required", "sensitive", "searchable", "uniqueValue", "active"].every((f) => typeof a[f] === "boolean") &&
+      Array.isArray(a.allowedValues) &&
+      a.allowedValues.every((v: unknown) => typeof v === "string") &&
+      (a.validationRegex === null || typeof a.validationRegex === "string") &&
+      (a.sourceMapping === null || typeof a.sourceMapping === "string"),
+  );
 }

@@ -1396,3 +1396,37 @@ Owner decision 2026-10-17: "go ahead with all the items … one by one".
   rules, templates).
 - A second person's approval of an import. Today the importer approves by
   reviewing the preview, as a direct save does.
+
+## 2026-10-18 — PLATFORM-P0-13: identity attributes in configuration bundles
+
+Owner decision 2026-10-18 (asked in chat): an import applies at once, with
+no second administrator, like policy and role edits. That item is closed.
+
+**Built:** no migration.
+- Bundle version 2 (`lib/config/bundle.ts`) carries the identity attributes
+  (identity type, name, definition, active), signed with the settings in a
+  fixed order. Version 1 files (settings only) are still read and verified.
+  A malformed attribute list makes the file "incomplete".
+- Identity module (owner of the attributes): `attributeBundle.ts` (pure)
+  plans an import: add what is missing (matched by identity type and
+  name), restore or retire to the file's active state, and leave a
+  definition that differs here as it is (definitions are never edited,
+  IDENTITY-P0-16). Every incoming definition is validated as a new one; an
+  invalid or repeated one refuses the whole file before anything is saved.
+  `attributeBundleService.ts` applies a plan through the page's own
+  service calls (audited), stopping on a failure and saying how many
+  changes were applied. Published from `modules/agent-identity/service.ts`.
+- The export route includes the attributes; the preview lists attribute
+  changes beside setting changes, plus a line for each one left as it is.
+  Attribute changes need `identity.manage`.
+- Docs: help (Global Configuration) and the knowledge base.
+
+**Verified:** `lib/config` and `attributeBundle.test.ts`: 29 passed (bundle:
+v2 round trip, any order, edited or dropped attribute refused, malformed
+list, v1 still read; planner: add, restore/retire, differs, identical file,
+invalid or repeated definition). Typecheck and eslint clean. E2E
+`global-configuration.spec.ts` asserts the export carries attributes and
+that a file with an added attribute is refused (nightly).
+
+**Left:** bundles for request policies, identity rules and templates; the
+Configuration Studio's draft/simulate/approve.

@@ -2339,3 +2339,16 @@ Migration applied to the dev project; security advisors show no new item.
 merged-in access for the next review (the register's suggested actions,
 not its closure criteria). Merged-in rows are already listed in
 `identity_merges.moved`.
+
+## 2026-10-18 — Identity attributes in configuration bundles (for PLATFORM-P0-13)
+
+Platform's configuration bundle now carries identity attributes; the
+Identity module owns how they are planned and applied
+(`attributeBundle.ts`, pure; `attributeBundleService.ts`), published from
+`service.ts` (`listBundleAttributes`, `planBundleAttributes`,
+`applyAttributePlan`, `attributePlanSize`). Import adds missing
+definitions and restores or retires them to the file's state through
+`createAttributeDefinition` / `setAttributeDefinitionActive`, so each
+change is validated and audited as from the Identity Attributes page; a
+definition that differs is never edited. Tests: `attributeBundle.test.ts`
+(4). Details in the Platform audit log.

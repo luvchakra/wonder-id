@@ -163,15 +163,20 @@ export function ConfigBundleImport() {
           </p>
           {shown.changes.length ? (
             <ul className="space-y-0.5 text-sm" aria-label="Changes the import makes">
-              {shown.changes.map((c) => (
-                <li key={c.label}>
+              {shown.changes.map((c, i) => (
+                <li key={i}>
                   {c.label}: {c.from} → {c.to}
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-sm">This organization already has these settings.</p>
+            <p className="text-sm">This organization already has this configuration.</p>
           )}
+          {shown.notes.map((n, i) => (
+            <p key={i} className="text-sm text-muted-foreground">
+              {n}
+            </p>
+          ))}
           {shown.changes.length ? (
             <PendingSubmitButton pendingLabel="Importing…">Import {shown.changes.length === 1 ? "1 change" : `${shown.changes.length} changes`}</PendingSubmitButton>
           ) : null}

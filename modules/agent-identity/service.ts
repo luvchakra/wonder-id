@@ -107,3 +107,7 @@ export { ATTRIBUTE_RULE_TRIGGERS, SETTABLE_FIELDS, READABLE_FIELDS } from "./att
 // IDENTITY-P0-23: merging two records of the same person, and undoing it.
 export { MERGE_FIELDS, duplicateReason, mergeDifferences, type MergeField } from "./identityMerge";
 export { findDuplicatesOf, getMergePreview, mergeIdentities, listActiveMergesFor, undoIdentityMerge, type DuplicateCandidate, type MergePreview, type IdentityMerge } from "./identityMergeService";
+
+// PLATFORM-P0-13: identity attributes in a configuration bundle.
+export { attributePlanSize, type AttributeImportPlan } from "./attributeBundle";
+export { listBundleAttributes, planBundleAttributes, applyAttributePlan } from "./attributeBundleService";
