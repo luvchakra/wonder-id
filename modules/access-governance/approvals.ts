@@ -7,7 +7,8 @@ import { ApiError } from "@/lib/shared/types/foundation";
 import type { AccessRequest } from "@/lib/shared/types/access-governance";
 import { getIdentity, getIdentityForUser, getIdentityNames } from "@/modules/agent-identity/service";
 import { toAccessRequest } from "./mappers";
-import { assignApprovedPackageRequest, loadPackageForApproval } from "./packages";
+import { assignApprovedPackageRequest, loadPackageEntitlements, loadPackageForApproval } from "./packages";
+import { checkAccessCombination } from "./accessSod";
 import { assessRisk, type RequestPolicy } from "./requestRules";
 import {
   actionFingerprint,
@@ -378,6 +379,17 @@ export async function decideApprovalStep(
   // already approved an earlier stage of this request.
   if (step.approverKind === "access_managers" && step.approverUserId === null && steps.some((s) => s.decidedBy === actor.userId)) {
     throw new ApiError(409, "ALREADY_DECIDED", "You already decided an earlier stage of this request; another access manager must review it");
+  }
+
+  // ACCESS-P0-22: what the identity holds may have changed since the request was made (another request
+  // approved meanwhile); an approval that would now give a forbidden combination is refused. Reject it instead.
+  if (decision === "approved" && (row.request_type ?? "grant") === "grant") {
+    const adding = row.access_package_id
+      ? ((await loadPackageEntitlements(tenantId, row.access_package_id as string)) ?? [])
+      : row.entitlement_id
+        ? [row.entitlement_id as string]
+        : [];
+    await checkAccessCombination(tenantId, actor.userId, { identityId: row.subject_identity_id, agentId: (row.agent_id as string | null) ?? subject?.agentId ?? null }, adding, { kind: "approval", objectType: "access_request", objectId: requestId });
   }
 
   const now = new Date();

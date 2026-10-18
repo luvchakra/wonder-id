@@ -331,7 +331,7 @@ An AI assistant can **propose** an onboarding configuration; a person always rev
 - Bundles of access that are commonly needed together, requested in one go.
 - **Business and IT roles** are kinds of access package: they are requested, approved, assigned, reviewed and ended the same way.
   - A role (or package) can include other active roles and packages. Assigning it grants its own contents and theirs; the role's page shows which role each item comes from. A role can't include itself, directly or through another role.
-  - **Simulate adding or removing** (on the role's page, for access managers) shows what it would grant or take away for one identity, from their recorded access, and the highest risk involved. Nothing is changed. Separation of duties between entitlements is not checked yet.
+  - **Simulate adding or removing** (on the role's page, for access managers) shows what it would grant or take away for one identity, from their recorded access, the highest risk involved, and any access it would combine that must not be combined. Nothing is changed.
 - **Birthright:** a package can be given automatically to the people it is for (by type and department) when they join, are rehired or move. They get it without a request; it is set up and verified like any other access.
   - Two administrators turn birthright on: one asks, someone else approves.
   - Any change to what the package includes, or to who it is for, needs approval again; until then nobody new gets it.
@@ -466,7 +466,11 @@ Findings are raised for:
 - **Preventive:** a policy set to block stops the second action on agent requests and grants; otherwise it is flagged.
 - **Detective:** the Control Center reports people who performed both actions in a recent period.
 - **History:** each change to a policy, including adding a rule, is a new version and applies at once; the policy's page lists every version, who made it and what changed.
-- **Not yet provided:** rules on combinations of access one identity must not hold (for example create vendor and approve payment). Requests, direct assignments and birthright packages are not checked against what a person already holds.
+- **Access that must not be combined:** a rule names access on one side and the access it must not be held with on the other (for example create vendor and approve payment). It applies to every kind of identity and is checked when access is requested, when a package or role is requested or assigned (birthright and identity rules included), and again when someone approves. What the identity holds includes access approved but not yet set up.
+  - A blocking rule refuses with the reason. A warning rule lets it go ahead, but always to a person, never approved automatically, and the conflict is recorded on the request.
+  - **Already held:** SoD Violations lists identities that hold a forbidden combination now.
+  - **Roles:** the role simulation shows any conflict adding a role would create.
+  - **Not yet provided:** exceptions with an owner, an expiry and a compensating control; a rule that asks for an extra approver instead of refusing.
 
 **Compliance**
 - **Control frameworks:** controls are mapped to SOX ITGC, SOC 1, PCI DSS, GLBA, DORA, RBI, SEBI CSCRF, CERT-In, GDPR and DPDP.
@@ -678,6 +682,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 18 Oct 2026 | Separation of duties over access: rules on access one identity must not hold together, checked at request, assignment and approval; identities already holding both are listed. |
 | 18 Oct 2026 | Business and IT roles: a kind of access package that can include other roles, with a simulation of adding or removing one. Owner reviews cover roles too. |
 | 18 Oct 2026 | Global Configuration export and import also carry identity attributes. |
 | 18 Oct 2026 | Nobody can merge their own person record, and merging two records with no shared email or name needs a reason. Automation credentials can't join groups. A vendor-console bootstrap address signed in by email must have been confirmed by a mailed link. |

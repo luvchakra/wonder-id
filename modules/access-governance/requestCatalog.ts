@@ -12,6 +12,7 @@ import { toAccessRequest } from "./mappers";
 import { startApprovalChain } from "./approvals";
 import { approvalOutcome, assessRisk, evaluateRequest, resolvePolicy, validatePolicyInput, type RequestPolicy, type RiskLevel } from "./requestRules";
 import { pendRequest } from "./pendingGrants";
+import { checkAccessCombination } from "./accessSod";
 import { enforceSoD } from "./sod";
 import { entitlementRequestRules } from "./entitlementTypeRules";
 import { typeForRequest } from "./entitlementTypes";
@@ -447,6 +448,21 @@ export async function submitAccessRequest(
   }
   // ACCESS-P0-14 / P0-31: an agent's separation-of-duties rules apply to its requests, before anything is written.
   if (agentId) await enforceSoD(tenantId, actor.userId, "access.request_submitted", agentId);
+  // ACCESS-P0-22: access one identity must not hold together. A blocking rule refuses (409);
+  // a warning is recorded on the request and sends it to a person, never automatic approval.
+  const sod =
+    requestType === "grant" && entitlementId
+      ? await checkAccessCombination(tenantId, actor.userId, { identityId: subject.id, agentId }, [entitlementId], { kind: "request", objectType: "application", objectId: applicationId })
+      : ({ kind: "none" } as const);
+  const initialStatus = sod.kind === "warn" ? "pending" : decision.initialStatus;
+  const checks =
+    sod.kind === "warn"
+      ? [
+          ...decision.checks.filter((c) => c.check !== "approval"),
+          { check: "approval", result: decision.initialStatus === "approved" ? "a person (separation-of-duties warning)" : (decision.checks.find((c) => c.check === "approval")?.result ?? "a person") },
+          { check: "sod", result: `conflicts with ${sod.conflicts.map((c) => `"${c.policyName}"`).join(", ")}` },
+        ]
+      : decision.checks;
 
   // An identical open request is returned, not duplicated (spec §11.5), once the
   // rules allow this requester to ask (ACCESS-P0-31: never someone else's request to a refused one).
@@ -480,14 +496,14 @@ export async function submitAccessRequest(
       request_type: requestType,
       justification,
       basket_id: opts.basketId ?? null,
-      status: decision.initialStatus,
+      status: initialStatus,
       request_policy_id: policy!.id,
-      policy_result: { checks: decision.checks },
+      policy_result: { checks },
       risk_level: risk,
       // A removal or a disable lasts: it has no duration or expiry.
       duration_days: timed ? decision.durationDays : null,
       requested_expiry: timed ? decision.expiresAt : null,
-      ...(decision.initialStatus === "approved" ? { decided_at: now.toISOString() } : {}),
+      ...(initialStatus === "approved" ? { decided_at: now.toISOString() } : {}),
     })
     .select()
     .single();
@@ -504,11 +520,11 @@ export async function submitAccessRequest(
     tenantId,
     actorId: actor.userId,
     actorType: "user",
-    action: decision.initialStatus === "approved" ? "access.request_auto_approved" : "access.request_submitted",
+    action: initialStatus === "approved" ? "access.request_auto_approved" : "access.request_submitted",
     objectType: "access_request",
     objectId: request.id,
     outcome: "success",
-    metadata: { subjectIdentityId: subject.id, agentId, applicationId, entitlementId, risk, policyId: policy!.id, durationDays: decision.durationDays, checks: decision.checks, ...(onBehalfOf ? { onBehalfOf } : {}) },
+    metadata: { subjectIdentityId: subject.id, agentId, applicationId, entitlementId, risk, policyId: policy!.id, durationDays: decision.durationDays, checks, ...(onBehalfOf ? { onBehalfOf } : {}) },
   });
   // ACCESS-P0-28: approved by its policy alone, it becomes its pending grant at once.
   if (request.status === "approved") await pendRequest(tenantId, request.id);

@@ -422,13 +422,14 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "separation-of-duties",
     title: "Separation of duties",
     category: "Access",
-    updated: "2026-10-16",
-    summary: "Administration › Policies & Controls › Separation of Duties Rules lists the rules in force; Risk & Detection › SoD Violations lists every time one caught someone.",
+    updated: "2026-10-18",
+    summary: "Administration › Policies & Controls › Separation of Duties Rules lists the rules in force; Risk & Detection › SoD Violations lists who holds access that must not be combined and every time a rule caught someone.",
     body: [
+      "Access that must not be combined: Actions › New access rule… names entitlements on one side and those they must not be held with on the other, on an identity policy. It is checked for every kind of identity when access is requested, when a package or role is requested or assigned (birthright and rules included), and again at each approval. If the policy's action is block, the request or approval is refused with the reason; otherwise it goes ahead, always to a person (never approved automatically), and the conflict is recorded on the request. Access already held together is listed under SoD Violations, and the role simulation shows any conflict a role would create.",
       "Separation of Duties Rules shows each rule: the actions one person must not both perform for the same agent, the policy it belongs to, whether a conflict is refused or allowed and recorded, and whether the policy is in effect. A rule is added or changed on its identity policy (Governance Policies); only a policy in effect enforces it.",
       "SoD Violations lists every conflict a rule caught, newest first: when, who, the action they tried and the one they had already done, the agent, and whether it was refused or allowed and recorded. It comes from the audit trail, so it needs permission to read the audit trail.",
     ],
-    keywords: ["sod", "separation of duties", "segregation of duties", "conflict", "conflicts", "toxic combination", "maker checker", "four eyes", "refused", "advisory"],
+    keywords: ["sod", "separation of duties", "segregation of duties", "conflict", "conflicts", "toxic combination", "maker checker", "four eyes", "refused", "advisory", "access conflict", "entitlement conflict", "combination"],
     href: "/sod",
   },
   {

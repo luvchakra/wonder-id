@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/shared/types/foundation";
 import {
   addPolicyException,
   addPolicyRule,
+  addAccessConflictRule,
   createDataSource,
   createEntitlement,
   createManualAccessGrant,
@@ -188,5 +189,25 @@ export async function reclassifyDataSourceAction(dataSourceId: string, _prev: Da
     return { status: "saved", message: "Saved." };
   } catch (err) {
     return formError(err);
+  }
+}
+
+// ACCESS-P0-22: a rule naming access one identity must not hold together,
+// added to an identity policy as a new version of it.
+export type AccessRuleState = { status: "idle" } | { status: "saved"; message: string } | { status: "error"; message: string };
+
+export async function addAccessConflictRuleAction(_prev: AccessRuleState, formData: FormData): Promise<AccessRuleState> {
+  const ctx = await requirePermission("policy.update");
+  try {
+    await addAccessConflictRule(ctx.tenantId!, ctx.userId, {
+      policyId: formData.get("policyId"),
+      left: formData.getAll("left").map(String),
+      right: formData.getAll("right").map(String),
+    });
+    revalidatePath("/sod");
+    return { status: "saved", message: "Rule added. It applies while its policy is in effect." };
+  } catch (err) {
+    const e = err as { message?: string; code?: string };
+    return { status: "error", message: e?.message || e?.code || "The rule could not be added." };
   }
 }

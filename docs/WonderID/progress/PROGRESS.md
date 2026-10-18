@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Last updated | 2026-10-17 |
+| Last updated | 2026-10-18 |
 | Current phase | F3 in progress. The exit scenario runs end to end against a stub system (2026-10-12): rogue access removed through the connector after a reviewer asks, verified, finding resolved |
 | Next story | By priority (owner, 2026-10-13): finish RISK-P0-13, then F4 (lifecycle rules, rule runtime, attribute rules, entitlement types, certification for every identity type) and the High QA sweeps. INTEGRATION stories are Low, implemented later. Up next and blocked lists: `../ROADMAP-STORIES.md` |
 | Plan | `../run-order/RUN-ORDER.md` · Design `../design/DESIGN.md` |
@@ -143,8 +143,8 @@ Exit test: not run.
 
 | Story | Module | Issue | Status | Notes |
 |---|---|---|---|---|
-| ACCESS-P0-21 Business and IT roles | Access | | Partial | 2026-10-18 (0203): roles as a kind of access package, role hierarchy, simulation of add/remove. Left: SoD impact (waits on ACCESS-P0-22) |
-| ACCESS-P0-22 Entitlement SoD | Access | | Not started | Backlog: Not Started |
+| ACCESS-P0-21 Business and IT roles | Access | | Done | 2026-10-18 (0203): roles as a kind of access package, role hierarchy, simulation of add/remove including SoD conflicts (with ACCESS-P0-22 part 1). Role edits apply at once and are audited field by field (owner decision 17 Oct); computed membership is through identity rules (IDENTITY-P0-21) |
+| ACCESS-P0-22 Entitlement SoD | Access | | Partial | 2026-10-18 part 1 (no migration): access conflict rules on identity policies, block or warn, at request, assignment and approval for every identity type; detective list; role simulation. Left: exceptions and the extra-approver action |
 | ACCESS-P0-23 Delegations | Access | | Done | 2026-10-14 part 1 (0176): approver delegation: time-limited, never to oneself, at most 180 days; the delegate decides named steps on the approver's behalf (both recorded and audited) and is notified; ended by either person or an access manager. Part 2 (0177): request delegation, where the delegate asks with the person's own request rights (never an access manager's), both are recorded, and neither approves it. Part 3 (0178): administration delegation, where the delegate gets time-bound copies of the person's roles (never Tenant Administrator) through Foundation's assignments, removed at once when ended early. 2026-10-17 part 4 (0200, owner decisions): person→agent and agent→agent delegation for named actions and applications, at most 180 days, in effect once an owner of the receiving agent approves (never the asker); the Runtime Gateway holds a request that names `onBehalfOf` for approval (DELEGATION_REQUIRED) unless an active delegation covers it |
 | ACCESS-P0-35 † Approved changes to governance objects | Access | | Done | 2026-10-14 part 1 (0179): request policies. With two or more active Tenant Administrators (owner decision) a change waits, with its field-by-field diff, for someone else who manages access; approved, it applies as the next numbered version (refused if the policy moved on); one administrator saves at once, still versioned. 2026-10-17 (owner decisions): roles apply at once, with no second approver (already audited field by field). Governance policies, SoD rules included, apply at once and are versioned with what changed: adding a rule is a version, and each policy shows its change history. Lifecycle and attribute rules already publish under four-eyes. Workflows join when they exist (Phase 10) |
 | ACCESS-P0-36 † SoD violation workflow; import guardrail | Access | | Not started | |

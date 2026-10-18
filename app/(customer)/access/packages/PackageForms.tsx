@@ -485,7 +485,18 @@ export function SimulateForm({ packageId, candidates }: { packageId: string; can
           ) : null}
           {state.changes.length ? <p className="text-muted-foreground">Highest risk {state.action === "add" ? "added" : "removed"}: {state.risk}</p> : null}
           {state.eligibility ? <p className="text-warning">{state.eligibility}</p> : null}
-          <p className="text-xs text-muted-foreground">Separation of duties between entitlements is not checked: no such rules exist yet. Nothing was changed.</p>
+          {state.sod.length ? (
+            <div className="space-y-1">
+              {state.sod.map((c, i) => (
+                <p key={i} className={c.blocking ? "text-destructive" : "text-warning"}>
+                  {c.blocking ? "Refused" : "Warning"}, separation of duties (&ldquo;{c.policyName}&rdquo;): {c.left.join(", ")} with {c.right.join(", ")}.
+                </p>
+              ))}
+            </div>
+          ) : state.action === "add" ? (
+            <p className="text-muted-foreground">No separation-of-duties conflict.</p>
+          ) : null}
+          <p className="text-xs text-muted-foreground">Nothing was changed.</p>
           {state.stale ? <p className="text-xs text-warning">Their access could not be refreshed; this uses what was last recorded.</p> : null}
         </div>
       ) : null}

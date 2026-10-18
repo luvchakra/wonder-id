@@ -34,6 +34,7 @@ import {
   type RoleSimulation,
 } from "./packageRules";
 import { markGrantsFulfilled, pendAssignment, queueRemoval, withdrawPendingGrants } from "./pendingGrants";
+import { checkAccessCombination, previewAccessConflicts, type ConflictPreview } from "./accessSod";
 
 /**
  * ACCESS-P0-20 — access packages (spec §12). Packages and their contents
@@ -296,7 +297,7 @@ export async function simulatePackageChange(
   packageId: string,
   identityId: string,
   action: "add" | "remove",
-): Promise<RoleSimulation & { eligible: { eligible: boolean; reasons: string[] }; holds: boolean; ledgerRefreshed: boolean }> {
+): Promise<RoleSimulation & { eligible: { eligible: boolean; reasons: string[] }; holds: boolean; ledgerRefreshed: boolean; sod: ConflictPreview[] }> {
   if (!UUID_RE.test(packageId) || !UUID_RE.test(identityId)) throw new ApiError(400, "VALIDATION_FAILED", "packageId and identityId: ids");
   const { getIdentityAccessLedger } = await import("./ledger");
   const supabase = await supabaseServer();
@@ -313,8 +314,14 @@ export async function simulatePackageChange(
   if (action === "remove" && !assignmentId) throw new ApiError(409, "NOT_ASSIGNED", "This identity doesn't hold it, so there is nothing to remove.");
   const contents = pkg.resources.map((r) => ({ applicationId: r.applicationId, entitlementId: r.entitlementId, label: r.entitlementName ? `${r.applicationName} · ${r.entitlementName}` : r.applicationName, risk: r.risk }));
   const sim = simulateRoleChange(action, contents, ledger.entries, assignmentId);
+  // ACCESS-P0-22: adding it would create these forbidden combinations (removing access creates none).
+  const sod =
+    action === "add"
+      ? await previewAccessConflicts(tenantId, { identityId, agentId: subject.agentId ?? null }, pkg.resources.map((r) => r.entitlementId).filter((e): e is string => Boolean(e)))
+      : [];
   return {
     ...sim,
+    sod,
     eligible: checkEligibility(pkg, { identityType: subject.identityType, department: subject.department, status: subject.status }),
     holds: Boolean(assignmentId),
     ledgerRefreshed: ledger.refreshed,
@@ -394,6 +401,13 @@ export async function loadPackageForApproval(tenantId: string, packageId: string
     ownerIdentityId: pkg.ownerIdentityId,
     digest: contentsDigest(resources.map((r) => ({ applicationId: r.applicationId, entitlementId: r.entitlementId, privilegeLevel: r.privilegeLevel }))),
   };
+}
+
+/** ACCESS-P0-22: the entitlements a package grants (its own and what it includes), for the approval-time check. Service role, tenant filtered. */
+export async function loadPackageEntitlements(tenantId: string, packageId: string): Promise<string[]> {
+  if (!UUID_RE.test(packageId)) return [];
+  const resources = (await resourcesOf(tenantId, [packageId], "service")).get(packageId) ?? [];
+  return resources.map((r) => r.entitlementId).filter((e): e is string => Boolean(e));
 }
 
 async function assertOwner(tenantId: string, ownerIdentityId: unknown): Promise<string | null | undefined> {
@@ -556,7 +570,8 @@ export async function assignBirthrightPackages(
     try {
       assignmentId = await createAssignment(tenantId, null, { packageId: pkg.id, identityId, requestId: null, source: "birthright", justification: `Birthright: ${meta.eventType}`, expiresAt: expiry.expiresAt });
     } catch (err) {
-      if (err instanceof ApiError && (err.code === "ALREADY_ASSIGNED" || err.code === "PACKAGE_EMPTY")) {
+      // A separation-of-duties block (ACCESS-P0-22) is audited by the check and skipped, like a package already held.
+      if (err instanceof ApiError && (err.code === "ALREADY_ASSIGNED" || err.code === "PACKAGE_EMPTY" || err.code === "SOD_CONFLICT")) {
         skipped++;
         continue;
       }
@@ -814,6 +829,14 @@ export async function requestPackage(
   if (openError || heldError) throw new ApiError(500, "QUERY_FAILED", (openError ?? heldError)!.message);
   if (open) return { request: toAccessRequest(open), duplicate: true };
   if (held) await refuse(409, "ALREADY_ASSIGNED", "The identity already holds this package");
+  // ACCESS-P0-22: refused now if what it grants must not be combined with what the identity holds; a warning is recorded.
+  const sod = await checkAccessCombination(
+    tenantId,
+    actor.userId,
+    { identityId: subject.id, agentId: subject.agentId ?? null },
+    pkg.resources.map((r) => r.entitlementId).filter((e): e is string => Boolean(e)),
+    { kind: "package_request", objectType: "access_package", objectId: packageId },
+  );
 
   const checks = [
     { check: "package", result: pkg.name },
@@ -822,6 +845,7 @@ export async function requestPackage(
     { check: "duration", result: expiry.days ? `${expiry.days} days` : "until removed" },
     { check: "risk", result: pkg.risk },
     { check: "approval", result: pkg.approval },
+    ...(sod.kind === "warn" ? [{ check: "sod", result: `conflicts with ${sod.conflicts.map((c) => `"${c.policyName}"`).join(", ")}` }] : []),
   ];
   const { data, error } = await admin
     .from("access_requests")
@@ -901,6 +925,16 @@ async function createAssignment(
   const admin = supabaseServiceRole();
   const resources = (await resourcesOf(tenantId, [input.packageId], "service")).get(input.packageId) ?? [];
   if (!resources.length) throw new ApiError(409, "PACKAGE_EMPTY", "The package includes nothing to assign");
+  // ACCESS-P0-22: every way a package is assigned (approved request, direct, birthright, rule) is checked
+  // against the identity's access; a blocking conflict assigns nothing (409), a warning is audited.
+  const subject = await getIdentity(tenantId, input.identityId);
+  await checkAccessCombination(
+    tenantId,
+    actorId,
+    { identityId: input.identityId, agentId: subject?.agentId ?? null },
+    resources.map((r) => r.entitlementId).filter((e): e is string => Boolean(e)),
+    { kind: input.source ?? "assignment", objectType: "access_package", objectId: input.packageId },
+  );
   const { data, error } = await admin
     .from("access_package_assignments")
     .insert({
