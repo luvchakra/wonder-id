@@ -3765,3 +3765,20 @@ context's reads, and `getSessionUser()` (with the auth server's live check)
 runs alongside them; `getTenantContext()` returns nothing unless the session
 is live. The proxy sends a `Server-Timing` header. Detail and verification in
 the QA audit log (2026-10-19, round 2).
+
+## 2026-10-19 — Performance round 4: the access context in one call (migration 0207)
+
+`getTenantContext()` now reads memberships, direct roles, group roles and
+active authorization policies through `my_access_context()`, one SECURITY
+INVOKER call, instead of four reads. The rules are unchanged:
+- RLS applies to every row;
+- roles and group members are filtered by the caller's own user id;
+- the active tenant's rows are picked in code;
+- inactive roles and groups grant nothing;
+- automation credentials lose group roles and human-only permissions;
+- nothing is used unless the live-session check passes.
+
+One difference: a failed read now leaves the person with no organization
+(`unavailable`), where before a failed role read kept the organization but
+no permissions. Both cases permit nothing. Detail and verification are in
+the QA audit log.

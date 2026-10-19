@@ -18,18 +18,14 @@ vi.mock("@/lib/tenant/hostTenant", () => ({ getHostTenant: async () => ({ target
 let automationAccess: unknown = null;
 vi.mock("@/lib/security/automationCredentials", () => ({ getAutomationAccess: async () => automationAccess }));
 
-type Result = { data: unknown; error: { code?: string; message?: string } | null };
-let results: Record<string, Result>;
-const ok = (data: unknown): Result => ({ data, error: null });
-const fail: Result = { data: null, error: { code: "57014", message: "canceling statement due to statement timeout" } };
-
-function query(table: string) {
-  const q = { select: () => q, eq: () => q, returns: async () => results[table] };
-  return q;
-}
-vi.mock("@/lib/db/supabaseServer", () => ({
-  supabaseServer: async () => ({ rpc: async () => results.my_memberships, from: (t: string) => query(t) }),
-}));
+// my_access_context() (migration 0207): memberships, roles, group roles and policies in one call.
+let parts: Record<string, unknown[]>;
+let failed = false;
+const rpc = vi.fn(async (name: string) => {
+  if (name !== "my_access_context") throw new Error(`unexpected rpc ${name}`);
+  return failed ? { data: null, error: { code: "57014", message: "canceling statement due to statement timeout" } } : { data: parts, error: null };
+});
+vi.mock("@/lib/db/supabaseServer", () => ({ supabaseServer: async () => ({ rpc }) }));
 
 const role = { id: "r1", name: "TENANT_SUPER_ADMIN", display_name: "Tenant Administrator", status: "active", role_permissions: [{ permissions: { key: "agent.read" } }] };
 const terms = { scope_type: "tenant", scope_values: [], starts_at: null, expires_at: null, requires_mfa: false };
@@ -39,11 +35,13 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   automationAccess = null;
   liveSession = true;
-  results = {
-    my_memberships: ok([{ tenant_id: "t1", name: "Acme", slug: "acme", account_type: "internal", mfa_required: false }]),
-    user_roles: ok([{ tenant_id: "t1", ...terms, roles: role }]),
-    group_members: ok([]),
-    authorization_policies: ok([]),
+  failed = false;
+  rpc.mockClear();
+  parts = {
+    memberships: [{ tenant_id: "t1", name: "Acme", slug: "acme", account_type: "internal", mfa_required: false }],
+    roles: [{ tenant_id: "t1", ...terms, roles: role }],
+    group_roles: [],
+    policies: [],
   };
 });
 
@@ -59,24 +57,27 @@ describe("getTenantContext when a read fails", () => {
     expect(ctx.unavailable).toBeUndefined();
   });
 
+  it("another tenant's roles, and a role RLS hides, grant nothing", async () => {
+    parts.roles = [{ tenant_id: "t2", ...terms, roles: { ...role, role_permissions: [{ permissions: { key: "role.manage" } }] } }, { tenant_id: "t1", ...terms, roles: null }];
+    const ctx = await resolve();
+    expect(ctx).toMatchObject({ tenantId: "t1", permissions: [] });
+  });
+
   it("a revoked session gets nothing, though its reads ran alongside the check", async () => {
     liveSession = false;
     const ctx = await resolve();
     expect(ctx).toMatchObject({ userId: "", tenantId: null, permissions: [] });
   });
 
-  for (const table of ["my_memberships", "user_roles", "group_members", "authorization_policies"]) {
-    it(`a failed ${table} read is unavailable, with no permissions`, async () => {
-      results[table] = fail;
-      const ctx = await resolve();
-      expect(ctx.unavailable).toBe(true);
-      expect(ctx.permissions).toEqual([]);
-      expect(ctx.roles).toEqual([]);
-    });
-  }
+  it("a failed read is unavailable, with no organization and no permissions", async () => {
+    failed = true;
+    const ctx = await resolve();
+    expect(ctx.unavailable).toBe(true);
+    expect(ctx).toMatchObject({ tenantId: null, permissions: [], roles: [] });
+  });
 
   it("an empty but successful read is still plain no access, not unavailable", async () => {
-    results.my_memberships = ok([]);
+    parts.memberships = [];
     const ctx = await resolve();
     expect(ctx).toMatchObject({ tenantId: null, permissions: [] });
     expect(ctx.unavailable).toBeUndefined();
@@ -88,13 +89,13 @@ describe("WID-H06: an automation credential's call", () => {
   const groupRow = { tenant_id: "t1", groups: { name: "Auditors", status: "active", group_roles: [{ ...terms, roles: groupRole }] } };
 
   it("a person keeps the roles of their groups", async () => {
-    results.group_members = ok([groupRow]);
+    parts.group_roles = [groupRow];
     const ctx = await resolve();
     expect([...ctx.permissions].sort()).toEqual(["agent.read", "audit.read"]);
   });
 
   it("gets nothing from a group, only the roles given on the credential's own page", async () => {
-    results.group_members = ok([groupRow]);
+    parts.group_roles = [groupRow];
     automationAccess = { credentialId: "c1" };
     const ctx = await resolve();
     expect(ctx.permissions).toEqual(["agent.read"]);

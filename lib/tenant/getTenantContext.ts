@@ -42,92 +42,10 @@ type Terms = { scope_type: ScopeType; scope_values: string[]; starts_at: string 
 
 type RoleRow = Terms & { tenant_id: string; roles: RoleOf };
 
-const ROLE_SELECT = "roles(id, name, display_name, status, role_permissions(permissions(key)))";
-const TERMS_SELECT = "scope_type, scope_values, starts_at, expires_at, requires_mfa";
-
-/**
- * The current user's active tenant memberships, once per request. The
- * customer shell's organization switcher lists these too; it used to run
- * its own copy of the same query.
- *
- * Read through my_memberships() (migration 0152), which returns only the
- * caller's own active memberships of active organizations. It also returns
- * organizations whose data the session cannot reach yet because they
- * require MFA (RLS hides those rows from tenant_memberships), so the
- * person is asked for MFA rather than treated as having no organization.
- */
-const readMyMemberships = cache(async (): Promise<{ rows: Membership[]; failed: boolean }> => {
-  // The token's user id only: getTenantContext() and getMyMemberships() wait for getSessionUser() too.
-  const user = (await getSessionClaims())?.user;
-  if (!user) return { rows: [], failed: false };
-  const supabase = await supabaseServer();
-  const { data, error } = await supabase.rpc("my_memberships");
-  const failed = logReadError("my_memberships", error);
-  return {
-    failed,
-    rows: ((data ?? []) as MembershipRow[]).map((m) => ({
-      tenantId: m.tenant_id,
-      name: m.name ?? m.tenant_id,
-      slug: m.slug ?? "",
-      automation: m.account_type === "automation",
-      mfaRequired: m.mfa_required === true,
-    })),
-  };
-});
-
-export const getMyMemberships = cache(async (): Promise<Membership[]> => {
-  const [user, read] = await Promise.all([getSessionUser(), readMyMemberships()]);
-  return user ? read.rows : [];
-});
-
-/**
- * The current user's role rows across every tenant they belong to, once
- * per request. Fetched without a tenant filter so it can run in parallel
- * with the membership lookup rather than after it; the caller picks the
- * active tenant's rows out of the result.
- *
- * Filtered by user_id for the same reason as the membership query: the
- * user_roles RLS policy is tenant-scoped, so without this the caller
- * inherits the union of EVERY role held by EVERY member of the tenant — a
- * READ_ONLY user in a tenant that also contains a TENANT_SUPER_ADMIN would
- * resolve with role.manage, agent.create and the rest. Privilege
- * escalation, not just a cosmetic over-fetch.
- */
-const getMyRoleRows = cache(async (): Promise<RoleRow[] | null> => {
-  const user = (await getSessionClaims())?.user;
-  if (!user) return [];
-  const supabase = await supabaseServer();
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select(`tenant_id, ${TERMS_SELECT}, ${ROLE_SELECT}`)
-    .eq("user_id", user.id)
-    .returns<RoleRow[]>();
-  return logReadError("user_roles", error) ? null : (data ?? []);
-});
-
 type GroupRoleRow = {
   tenant_id: string;
   groups: { name: string; status: string; group_roles: (Terms & { roles: RoleOf })[] } | null;
 };
-
-/**
- * FOUNDATION-P0-26 — the roles the user holds through groups, resolved per
- * request like direct roles, so joining or leaving a group applies on the
- * next request. Filtered by user_id for the same reason as above (the
- * group_members RLS policy is tenant-scoped); RLS limits the rows to
- * tenants where the user is an active member.
- */
-const getMyGroupRoleRows = cache(async (): Promise<GroupRoleRow[] | null> => {
-  const user = (await getSessionClaims())?.user;
-  if (!user) return [];
-  const supabase = await supabaseServer();
-  const { data, error } = await supabase
-    .from("group_members")
-    .select(`tenant_id, groups(name, status, group_roles(${TERMS_SELECT}, ${ROLE_SELECT}))`)
-    .eq("user_id", user.id)
-    .returns<GroupRoleRow[]>();
-  return logReadError("group_members", error) ? null : (data ?? []);
-});
 
 type PolicyRow = {
   id: string;
@@ -140,21 +58,58 @@ type PolicyRow = {
   exempt_role_ids: string[];
 };
 
+type AccessContextRows = { memberships: MembershipRow[]; roles: RoleRow[]; group_roles: GroupRoleRow[]; policies: PolicyRow[] };
+
 /**
- * FOUNDATION-P0-19 — the active explicit authorization policies of the
- * tenants the user belongs to (RLS), once per request. If they cannot be
- * read, the context fails closed: see getTenantContext().
+ * The current user's memberships, role rows, group role rows and active
+ * authorization policies, in one call per request (my_access_context(),
+ * migration 0207; it replaced four reads, performance review 2026-10-19).
+ * Null if it could not be read: the context then fails closed.
+ *
+ * - Memberships come from my_memberships() (migration 0152): only the
+ *   caller's own active memberships of active organizations, including
+ *   organizations that require MFA the session has not passed, so the
+ *   person is asked for MFA rather than treated as having no organization.
+ * - Roles and group members are filtered by the caller's user id inside the
+ *   function: their RLS policies are tenant-scoped, so without it the caller
+ *   would inherit every role of every member of the tenant (privilege
+ *   escalation, not a cosmetic over-fetch).
+ * - The function is SECURITY INVOKER, so every row is read under the
+ *   caller's own RLS, as the four separate reads were. Roles across all the
+ *   user's tenants are returned; the caller picks the active tenant's.
  */
-const getMyPolicyRows = cache(async (): Promise<PolicyRow[] | null> => {
+const readAccessContext = cache(async (): Promise<AccessContextRows | null> => {
+  // The token's user id only: getTenantContext() and getMyMemberships() wait for getSessionUser() too.
   const user = (await getSessionClaims())?.user;
-  if (!user) return [];
+  if (!user) return { memberships: [], roles: [], group_roles: [], policies: [] };
   const supabase = await supabaseServer();
-  const { data, error } = await supabase
-    .from("authorization_policies")
-    .select("id, tenant_id, name, effect, permissions, scope_type, scope_values, exempt_role_ids")
-    .eq("status", "active")
-    .returns<PolicyRow[]>();
-  return logReadError("authorization_policies", error) ? null : (data ?? []);
+  const { data, error } = await supabase.rpc("my_access_context");
+  if (logReadError("my_access_context", error)) return null;
+  const rows = (data ?? {}) as Partial<AccessContextRows>;
+  return { memberships: rows.memberships ?? [], roles: rows.roles ?? [], group_roles: rows.group_roles ?? [], policies: rows.policies ?? [] };
+});
+
+/**
+ * The current user's active tenant memberships, once per request. The
+ * customer shell's organization switcher lists these too.
+ */
+const readMyMemberships = cache(async (): Promise<{ rows: Membership[]; failed: boolean }> => {
+  const read = await readAccessContext();
+  return {
+    failed: read === null,
+    rows: (read?.memberships ?? []).map((m) => ({
+      tenantId: m.tenant_id,
+      name: m.name ?? m.tenant_id,
+      slug: m.slug ?? "",
+      automation: m.account_type === "automation",
+      mfaRequired: m.mfa_required === true,
+    })),
+  };
+});
+
+export const getMyMemberships = cache(async (): Promise<Membership[]> => {
+  const [user, read] = await Promise.all([getSessionUser(), readMyMemberships()]);
+  return user ? read.rows : [];
 });
 
 function grantOf(terms: Terms, role: NonNullable<RoleOf>, source: Grant["source"], via: string | null): Grant {
@@ -186,10 +141,8 @@ function grantOf(terms: Terms, role: NonNullable<RoleOf>, source: Grant["source"
  * instead (FOUNDATION-P0-22) — still only among the user's memberships.
  *
  * Resolved once per request (`cache()`): the layout, the page, and the
- * service calls under them all share it. The two lookups it needs run in
- * parallel, so the whole thing is one database round trip after the
- * (local) session check rather than the three sequential ones it used to
- * be.
+ * service calls under them all share it. Its data is one database call
+ * (my_access_context()), run alongside the auth server's session check.
  */
 export const getTenantContext = cache(async (): Promise<TenantContext> => {
   const signedOut: TenantContext = { userId: "", tenantId: null, tenantSlug: null, roles: [], permissions: [] };
@@ -198,15 +151,7 @@ export const getTenantContext = cache(async (): Promise<TenantContext> => {
   // Performance review (2026-10-19): the auth server's check that the session
   // still exists (getSessionUser) runs alongside the reads, which need only
   // the token's user id. Nothing is used unless the session is live.
-  const [user, membershipRead, directRoleRows, groupRoleRows, policyRows, cookieStore, host] = await Promise.all([
-    getSessionUser(),
-    readMyMemberships(),
-    getMyRoleRows(),
-    getMyGroupRoleRows(),
-    getMyPolicyRows(),
-    cookies(),
-    getHostTenant(),
-  ]);
+  const [user, access, membershipRead, cookieStore, host] = await Promise.all([getSessionUser(), readAccessContext(), readMyMemberships(), cookies(), getHostTenant()]);
   if (!user) return signedOut;
   const memberships = membershipRead.rows;
   // A failed read is never "no access" (owner decision, 2026-10-17): still
@@ -243,9 +188,10 @@ export const getTenantContext = cache(async (): Promise<TenantContext> => {
   const tenantId = activeMembership.tenantId;
   // Roles, groups or policies that cannot be read are never permission
   // (CLAUDE.md §17.4): no permissions at all, marked unavailable.
-  if (directRoleRows === null || groupRoleRows === null || policyRows === null) {
+  if (!access) {
     return { userId: user.id, tenantId, tenantSlug: activeMembership.slug || null, roles: [], permissions: [], grants: [], policies: [], aal: user.aal, unavailable: true };
   }
+  const { roles: directRoleRows, group_roles: groupRoleRows, policies: policyRows } = access;
   // FOUNDATION-P0-19 — the engine's facts for this tenant: every role
   // assignment, direct and through active groups, with its terms. An
   // inactive role grants nothing (FOUNDATION-P0-25).
