@@ -101,7 +101,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "navigating",
     title: "Finding your way around",
     category: "Getting started",
-    updated: "2026-10-16",
+    updated: "2026-10-19",
     summary:
       "The sidebar lists WonderID's areas: Home, My Workspace, Access, AI Agents, Access Reviews, Risk & Detection, Self Service and Administration. Each opens its own menu, and you only see what your roles can use.",
     body: [
@@ -110,7 +110,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       "Administration is always last and opens its own menu: Identities, Applications, Policies & Controls, Reports & Audit, Users & Roles, Integrations, Organization Settings, and Privacy & Audit.",
       "The search box at the top of the sidebar finds menu items only (type “sync” to find Sync Jobs, with where it lives). To search your data, use the box in the header, or Ctrl+K / ⌘K: it finds agents, owners, applications, entitlements, findings, investigations, policies, campaigns, integrations and runtime decisions that your roles can read, in your organization. To find a person, use Administration › Identities.",
       "The toggle at the top right of the sidebar collapses it to a strip of icons: the toggle, a search icon that opens the sidebar into its search box, then one icon per area. WonderID remembers your choice. On a phone the sidebar is a drawer, opened by the round More button at the bottom right. The sidebar's footer shows the WonderID version, and its foot holds the organization switcher.",
-      "Under its title, every record's page says who created it and when, and who last changed it and when. Records from before this was recorded show the date alone. Many lists have an Actions menu with Export CSV, and Import CSV… where records can be imported, with a preview before anything is added.",
+      "Under its title, every record's page says who created it and when, and who last changed it and when. Records from before this was recorded show the date alone. A record's page opens at its short number within your organization (for example /access/requests/42); older links with a long reference still work and take you there. Many lists have an Actions menu with Export CSV, Import CSV… where records can be imported (with a preview before anything is added), and the list's create form, such as New workflow…, which opens in a window over the list.",
       "The bell in the header shows your notifications. The account menu holds Settings, My privacy, WonderID AI (the assistant on this page), Get Help (this guide), Install the app, Appearance (light, dark or system theme) and Log Out.",
       "If a page or button you expect is missing, your roles probably don't include it. See “Why can't I see a page or button?”.",
     ],
@@ -186,11 +186,11 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "identity-sources",
     title: "Authoritative identity sources",
     category: "Identities",
-    updated: "2026-10-16",
+    updated: "2026-10-19",
     summary:
       "Identity sources import people from an HR export or a connected system, with precedence rules when two sources disagree and a review queue for records that match more than one identity.",
     body: [
-      "Administration › Integrations › Authoritative Sources › New source asks for a name, a source type (CSV file, SCIM, REST API, HR system API or an existing connection), which identities it provides, and how its columns map to WonderID attributes. Each type suggests a mapping you can edit. Nothing is imported until you run it. A source read from a connection can run by hand, daily or hourly.",
+      "Administration › Integrations › Authoritative Sources › New source asks for a name, a source type (CSV file, SCIM, REST API, HR system API or an existing connection), which identities it provides, and how its columns map to WonderID attributes. Each type suggests a mapping you can edit. Nothing is imported until you run it. A source read from a connection can run by hand, daily or hourly. Choose a Default ID role on the source's page and each new person it imports with an email is invited to WonderID with that role.",
       "Choose Full when the file or connection holds everyone (identities missing from it are treated as leavers) or Partial to touch only the records given. Tick “Preview only” first to see what would change without changing anything. A full run that would mark more people as leavers than the source's limit allows waits for a person instead. Each run reports what it created, updated, left pending, flagged as leavers and rejected, and its page lists every change and problem.",
       "When two sources supply the same attribute, the one with the higher precedence wins, and the losing value is kept as provenance rather than discarded.",
       "A source record that matches more than one existing identity goes to Administration › Identities › Identity Matching. WonderID never picks one for you: link the record to the right identity, create a new one, or dismiss it.",
@@ -265,11 +265,11 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "discovery",
     title: "Agent discovery and Shadow AI",
     category: "Agents",
-    updated: "2026-10-16",
+    updated: "2026-10-19",
     summary:
       "The Discovery Inbox lists agent-like identities found in your systems so you can register, link or ignore each one; activity from unregistered agents is marked Shadow AI.",
     body: [
-      "Discovery looks through your connections for identities that behave like AI agents and lists them in AI Agents › Agent Discovery with the evidence and a confidence signal. Use Discover Now on a connection to run it straight away. The tabs narrow the list to New, Shadow AI, Needs Review, Potential Duplicates, Recently Changed or Ignored candidates.",
+      "Discovery looks through your connections for identities that behave like AI agents and lists them in AI Agents › Agent Discovery with the evidence and a confidence signal. MCP tools that are themselves AI agents are listed too. Use Discover Now on a connection to run it straight away. The tabs narrow the list to New, Shadow AI, Needs Review, Potential Duplicates, Recently Changed or Ignored candidates.",
       "Open a candidate to see why it was identified as an agent. The reasons are rule-based and backed by evidence, never a model's guess. Register it as a governed agent, link it to one you already have, or ignore it. Ignoring is recorded, so the same candidate doesn't come back as noise.",
       "AI Agents › Duplicate Review lists registrations that matched an agent you already have, with the match score and what matched. Merge discards the pending registration; Confirm distinct completes it as a separate agent. Runtime activity from an agent nobody registered is shown as Shadow AI, on Agent Discovery and as a banner on the Risk Dashboard, with how many events were seen; none of it is governed until the agent is registered.",
     ],
@@ -295,13 +295,13 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "applications",
     title: "Applications and onboarding",
     category: "Applications",
-    updated: "2026-10-16",
+    updated: "2026-10-19",
     summary:
       "Administration › Applications › Application Catalog lists every application you govern; new ones are onboarded step by step before they go live.",
     body: [
-      "Each application has an owner, a type, a risk level and an onboarding status. The catalog counts applications that are active, still onboarding, missing an owner or high risk, and filters by status, type and risk. Onboarding Reviews lists those still onboarding. Start a new one from Self Service › Onboard Application, then open it and choose Onboarding.",
-      "Onboarding has five steps: Configure (the connection its accounts and entitlements are read from, how an account is matched to an identity, its request and certification policy, and which operations the connection fulfils), Validate (checks the configuration against the onboarding checklist), Simulate (plays the configuration against the accounts already imported; nothing is created, changed or removed), Approve and Promote.",
-      "A passing simulation submits the exact version that was simulated. Someone other than the person who submitted it approves; only an approved, unchanged version can be promoted, and promoting makes the application active. Change the configuration later and the new version is validated and approved again. A failed validation or simulation stops onboarding with the reason.",
+      "Each application has an owner, a type, a risk level and an onboarding status. The catalog counts applications that are active, still onboarding, missing an owner or high risk, and filters by status, type and risk. Onboarding Reviews lists those still onboarding. Start a new one from Self Service › Onboard Application, then open it and choose Onboarding. An application's page has tabs: Details, Entitlements, Onboarding, Accounts and Settings. On Entitlements you can add an entitlement by hand under one of the application's entitlement types, and edit, disable or delete one from its row menu. An entitlement shows Requestable only when someone can really request it; without a request policy it shows Needs a request policy.",
+      "Onboarding has five steps: Configure (the connection its accounts and entitlements are read from, how an account is matched to an identity, its request and certification policy, which operations the connection fulfils, and the account name format used for the accounts approved requests create, for example jane.doe), Validate (checks the configuration against the onboarding checklist), Simulate (plays the configuration against the accounts already imported; nothing is created, changed or removed), Approve and Promote.",
+      "A passing simulation submits the exact version that was simulated. Someone other than the person who submitted it approves. An administrator may approve their own submission, with a note saying why; it is recorded as self-approved. Only an approved, unchanged version can be promoted, and promoting makes the application active. Change the configuration later and the new version is validated and approved again. A failed validation or simulation stops onboarding with the reason.",
       "Onboarding Templates keeps starting defaults per connection type: owners, entitlement types and a questionnaire, so applications of that kind are onboarded the same way. On the onboarding page you can also ask for a proposed configuration from an OpenAPI document or a sample account. It is a proposal, AI may help draft it, and applying it only fills the draft; it is never applied on its own.",
       "Administration › Applications › Discovered Applications lists applications found by connections, API documents or people. An unrecognized one waits for someone to register it, link it to an existing application, record an exception, or ignore it with a reason. Suspending or retiring an application needs a reason and is audited.",
     ],
@@ -343,11 +343,11 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "access-requests",
     title: "Requesting and approving access",
     category: "Access",
-    updated: "2026-10-18",
+    updated: "2026-10-19",
     summary:
       "People request access from a catalog; each request follows its request policy through staged approvals, and nobody can decide their own request.",
     body: [
-      "Access › Request Access lists what can be requested. Pick an application, entitlement or package, say who it is for (yourself, or someone else if the policy allows it), give a justification when the policy asks for one, choose a duration within its limit and submit. What the request will meet, automatic approval or approval by your manager and/or the owner, is shown before you submit. Several at once asks for several items for one or more people in one go, or the same access a colleague has; each line becomes its own request, and you can save it as a draft.",
+      "Access › Request Access lists what can be requested. Pick an application, entitlement or package, say who it is for (yourself, or someone else if the policy allows it), give a justification when the policy asks for one, choose a duration within its limit and submit. What the request will meet, automatic approval or approval by your manager and/or the owner, is shown before you submit. Several at once asks for several items for one or more people in one go, or the same access a colleague has; each line becomes its own request, and you can save it as a draft. Every request gets a number to quote, REQ and nine digits (for example REQ000000042), counted per organization; it appears with its barcode when you submit, on the request's page and in the requests list.",
       "Access › Request Policies set the terms for the organization, an application or one entitlement (the most specific wins; with no policy, nothing is requestable). A policy chooses the approval route (manager, owner, or both, in order or at the same time), how many days each approver has and what happens after that, who may request for others, the longest and default duration, and whether a justification is required. A policy can approve requests below a risk threshold automatically; high-risk access always needs a person, and a critical-risk request adds an access-manager review. A change to a request policy takes effect only once someone other than the proposer approves it.",
       "Access › Approval Workflows are approval patterns you define once and reuse: a policy that chooses a workflow is approved by its levels instead of the route. Create one from Actions › New workflow…. Each level names its approvers (the manager, the manager's manager, the owner of what is requested, the application owner, a named person, a group whose members any one can approve, or access managers), whether all of them or any one must approve, and optionally the lowest risk it applies from. Levels run in order and a rejection at any level rejects the request. For a service account or an AI agent, the owner of what is requested approves where a level asks for a manager. A change applies to new requests at once; requests already waiting keep their approvers. A workflow that a policy uses can't be retired.",
       "Approvers decide under My Workspace › Approvals; your own requests are under My Requests, and Access › All Requests lists everyone's for those who manage access. A request's page shows its approval chain step by step. Nobody can approve their own request, and a change to what was requested means earlier approvals have to be given again. You can cancel your own request while it waits. Statuses are Waiting for approval, Approved, Rejected, Fulfilled, Cancelled and Expired.",
@@ -360,11 +360,11 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "fulfilment",
     title: "Provisioning tasks",
     category: "Access",
-    updated: "2026-10-16",
+    updated: "2026-10-19",
     summary:
       "Approved access that no connection sets up becomes a task for a person or a group: claim it, make the change, mark it Done or Failed. It closes when the next sync finds the access.",
     body: [
-      "My Workspace › My Tasks lists the tasks assigned to you or your groups; Access › Provisioning Tasks lists every task, with a workload view of who has what. An application (or one of its entitlement types) names the person or group its tasks go to.",
+      "My Workspace › My Tasks lists the tasks assigned to you or your groups; Access › Provisioning Tasks lists every task, with a workload view of who has what. An application (or one of its entitlement types) names the person or group its tasks go to. A new account an approved request needs is named by the application's account name format (for example jane.doe). For someone with both an everyday and an admin account on the application, standard access goes to the everyday account; admin access waits for a person to choose the account.",
       "Claim a task, make the change in the target system, then choose Done (with an optional note) or Failed (saying what failed). A task can be reassigned with a reason. Tasks are due a set time after approval, from Governance Settings; removals are due within a day, and overdue tasks remind their owner daily.",
       "Done is your record of the change, not proof of it: the task closes when the next sync finds the access on the target (or no longer finds removed access).",
     ],
@@ -514,11 +514,11 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "rogue-accounts",
     title: "Rogue accounts",
     category: "Risk",
-    updated: "2026-10-16",
+    updated: "2026-10-19",
     summary:
       "Risk & Detection › Rogue Accounts lists access found in a connected system that nothing in WonderID explains: no request, package or birthright rule granted it.",
     body: [
-      "Each account with rogue access gets one ticket, such as RA-000012, numbered in order within your organization; everything rogue on that account belongs to it. The account's page shows the ticket and each piece of rogue access.",
+      "Each account with rogue access gets one ticket, such as RA-000012, numbered in order within your organization; everything rogue on that account belongs to it. The account's page shows the ticket and each piece of rogue access. If it says rogue access could not be checked just now, WonderID could not read it at that moment; reload to try again. It never shows “none” when it could not check.",
       "Remove access (or Disable account) raises an ordinary request under the application's rules, quoting the ticket number. Under Other outcomes, someone with risk-management permission, never the account's owner, can instead accept it as an exception until a date at most 90 days away, or close it as a false positive, each with a reason.",
       "The ticket stays open until all of the account's rogue access is dealt with: removed (confirmed by a later sync) or approved afterwards, with the request attached. The access history keeps the earlier Rogue status either way.",
     ],
@@ -576,14 +576,14 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "integrations",
     title: "Connecting source systems",
     category: "Integrations",
-    updated: "2026-10-16",
+    updated: "2026-10-19",
     summary:
       "Connections bring identities, access and runtime events in from your existing systems; their credentials are encrypted and shown masked, and a connection is read-only unless explicitly granted write access.",
     body: [
-      "Every flow of your organization's data into or out of WonderID goes through a connection. Administration › Integrations › Connector Library lists what WonderID can connect to: HR systems, identity providers, directories, applications, infrastructure such as Kubernetes, secrets stores, databases, SCIM, webhooks, CSV files, MCP runtimes and agent runtimes. Choose one and connect to create a connection; an administrator can also write a connection type or upgrade a connection to a newer version of its type. Connections lists yours, and people come in through Authoritative Sources.",
+      "Every flow of your organization's data into or out of WonderID goes through a connection. Administration › Integrations › Connector Library lists what WonderID can connect to: HR systems, identity providers, directories, applications, infrastructure such as Kubernetes, secrets stores, databases, SCIM, webhooks, CSV files, MCP runtimes and agent runtimes. Choose one and connect to create a connection; an administrator can also write a connection type, in a guided Form beside the JSON (both edit the same text, and Try it against a system lets you pick field paths from a sample response), or upgrade a connection to a newer version of its type. Connections lists yours, and people come in through Authoritative Sources.",
       "A connection's page shows every setting and credential its type declares. With permission to manage integrations you can change them there; a credential field left empty keeps the saved value. Saved credentials are shown masked and never in full; they are encrypted at rest and never returned by any API or written to logs. Outbound calls are checked so a connection can't be pointed at internal network addresses, and Governance Settings can limit which hosts connections reach.",
       "A connection declares its capabilities explicitly. One configured read-only cannot write or remediate, and that boundary is enforced. A connection that may make changes is limited to a number of changes an hour, and a sync that finds too much gone waits for a person. Connector Gateway shows the traffic every connection sends and receives.",
-      "From a connection's page you can test it and run a sync, or set it to sync on a schedule. Sync runs appear under Sync Jobs with their status and errors; a failed sync also notifies you. MCP Servers inventories the servers, tools and resources your agents use and marks each tool as read or write.",
+      "From a connection's page you can test it and run a sync, or set it to sync on a schedule. Sync runs appear under Sync Jobs with their status and errors; a failed sync also notifies you. MCP Servers inventories the servers, tools and resources your agents use and marks each tool as read or write. A tool that is itself an AI agent (it drafts, answers or generates) is listed under AI agents with the reason, or marked Declared by the server when the server says so, with what the server says it may do; such tools also appear in Agent Discovery so you can register them.",
     ],
     keywords: ["integration", "connector", "connection", "connection type", "saviynt", "rest", "mcp", "webhook", "sync", "sync failed", "import", "credentials", "masked", "settings", "connect", "field mapping", "test connection", "gateway"],
     href: "/integrations",
@@ -624,11 +624,11 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "users",
     title: "Users and membership",
     category: "Administration",
-    updated: "2026-10-16",
+    updated: "2026-10-19",
     summary:
       "Administration › Users & Roles › Users lists the people in your organization; add them by invitation, and suspend, reactivate, deactivate or remove them with a recorded reason.",
     body: [
-      "Add user has three steps: Basic details (name, email, job title and department), ID roles (internal or external user, how they sign in, and the roles they start with) and Review. Choose Send invitation, and they join when they accept it, or Add user, and they are an active member straight away. Inviting needs the invite permission and adding needs the create permission. Add user can also start from a person already under Identities; their page has Give WonderID access when they can't sign in yet. Import CSV… on the Users page invites many people at once, with a preview first.",
+      "Add user has three steps: Basic details (name, email, job title and department), ID roles (internal or external user, how they sign in, and the roles they start with) and Review. Choose Send invitation, and they join when they accept it, or Add user, and they are an active member straight away. Inviting needs the invite permission and adding needs the create permission. Add user can also start from a person already under Identities; their page has Give WonderID access when they can't sign in yet, and an ID Roles tab that shows the ID roles they hold, where an administrator can add or remove one. Import CSV… on the Users page invites many people at once, with a preview first.",
       "An invitation expires after the period set in Governance Settings (30 days unless changed). If email isn't configured you're told so, and they can use “Forgot password?” on the sign-in page.",
       "Suspending someone ends their sessions at once; reactivating restores access. Removing them also clears their roles and group memberships, while their history stays in the audit trail. A user's page shows their roles and groups, their effective permissions with where each comes from, their access history and their live sessions.",
       "Nobody can change their own membership or give themselves a role, and the organization always keeps at least one Tenant Administrator.",
@@ -869,14 +869,15 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "faq-cant-see",
     title: "Why can't I see a page or button?",
     category: "FAQ",
-    updated: "2026-10-16",
+    updated: "2026-10-19",
     summary:
       "Your roles don't include the permission it needs, a scoped role doesn't apply there, a role has expired or needs MFA, or an authorization policy denies it.",
     body: [
       "Ask an administrator to open your user page under Administration › Users & Roles › Users: it shows your roles, their scope and dates, and each effective permission with where it comes from.",
       "A refusal that names a policy, “MFA required” or “approval required” tells you exactly which rule stopped you. Ask an administrator to change your role or the policy; nobody can grant themselves access.",
+      "“We couldn't check your access” means WonderID could not read your organization or roles just then, so it shows nothing rather than guess. Your session was not ended and nothing was changed; it is usually brief, so try again in a moment.",
     ],
-    keywords: ["can't see", "cannot see", "missing button", "forbidden", "403", "not allowed", "denied", "no access", "permission denied", "mfa required"],
+    keywords: ["can't see", "cannot see", "missing button", "forbidden", "403", "not allowed", "denied", "no access", "permission denied", "mfa required", "couldn't check your access", "unavailable"],
     href: "/settings/users",
   },
   {
