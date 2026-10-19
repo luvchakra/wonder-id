@@ -22,6 +22,8 @@ import { brandTitle, wonderIdBrand } from "@/modules/ui/brand";
 import { roleLabel } from "@/lib/users/userRules";
 import { WonderIDLogo } from "@/modules/ui/Logo";
 import { AuthShell } from "@/modules/ui";
+import { after } from "next/server";
+import { logRequestTimings, requestTimings } from "@/lib/db/requestTimings";
 
 // EXPERIENCE-P0-01.1. The one shared customer-facing shell every domain
 // module's pages mount into (app/(customer)/* — a Next.js route group, so
@@ -57,6 +59,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function CustomerLayout({ children }: { children: React.ReactNode }) {
+  // Performance review (2026-10-19): the request's Supabase calls (layout and
+  // page share the store), logged after the response when they were slow.
+  const timings = requestTimings();
+  after(() => logRequestTimings(timings, "customer page"));
   // Performance review (2026-10-19): the reads that need only the person
   // start now, alongside the tenant context, instead of after it.
   // Each falls back to its "not shown" value, so an early failure is never unhandled.
