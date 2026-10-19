@@ -967,13 +967,3 @@ export function getSection(id: string): GuideSection | undefined {
   return GUIDE_SECTIONS.find((s) => s.id === id);
 }
 
-/** The latest additions, each pointing at the guide section that explains it. */
-export const WHATS_NEW = [
-  { id: "identities", label: "Merging duplicate people", note: "Compare two records of the same person, choose the values that stay, merge them, and undo it if needed." },
-  { id: "rogue-accounts", label: "Rogue accounts", note: "Access nothing in WonderID explains gets one ticket per account, and is removed through a request." },
-  { id: "fulfilment", label: "Provisioning tasks", note: "Approved access a connection can't set up goes to a person or group, and closes when a sync finds it." },
-  { id: "certification", label: "Access reviews for everyone", note: "Review people's access, WonderID roles, packages and applications, by managers or owners." },
-  { id: "delegations", label: "AI agents acting for you", note: "Let an agent act for you for named actions, once its owner approves; the Runtime Gateway enforces it." },
-  { id: "identity-rules", label: "Identity rules that grant access", note: "Add people to a group or assign a package, after approval or automatically, from a rule a second person published." },
-  { id: "api-clients", label: "API clients", note: "Let a pipeline call the WonderID API with its own roles, approved by a second administrator." },
-] as const;

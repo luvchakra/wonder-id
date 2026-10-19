@@ -2,7 +2,8 @@
 import { readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
-import { GUIDE_SECTIONS, WHATS_NEW } from "./content";
+import { GUIDE_SECTIONS } from "./content";
+import { RELEASE_NOTES } from "./releaseNotes";
 
 /**
  * Fails when the help guide links to a route or anchor that no longer
@@ -53,7 +54,22 @@ describe("help guide links", () => {
     }
   });
 
-  it("every What's new item points at a section that exists", () => {
-    for (const item of WHATS_NEW) expect(IDS.has(item.id), item.id).toBe(true);
+  it("every release note points at a section that exists", () => {
+    for (const n of RELEASE_NOTES) for (const h of n.highlights) expect(IDS.has(h.section), `${n.id} → ${h.label}`).toBe(true);
+  });
+
+  it("release notes are newest first, one per id, each with what went live", () => {
+    expect(RELEASE_NOTES.length).toBeGreaterThan(0);
+    const ids = RELEASE_NOTES.map((n) => n.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const n of RELEASE_NOTES) {
+      expect(n.id, n.id).toMatch(/^release-\d{4}-\d{2}-\d{2}(-\d+)?$/);
+      expect(n.id.startsWith(`release-${n.date}`), n.id).toBe(true);
+      expect(n.commit, n.id).toMatch(/^[0-9a-f]{7,40}$/);
+      expect(n.highlights.length, n.id).toBeGreaterThan(0);
+      expect(IDS.has(n.id), `${n.id} clashes with a guide section`).toBe(false);
+    }
+    const dates = RELEASE_NOTES.map((n) => n.date);
+    expect([...dates].sort().reverse()).toEqual(dates);
   });
 });

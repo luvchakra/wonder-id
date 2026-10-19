@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/tenant/session";
 import { ArrowUpRight } from "lucide-react";
-import { GUIDE_CATEGORIES, GUIDE_SECTIONS, WHATS_NEW, sectionsByCategory } from "@/modules/ui/help/content";
+import { GUIDE_CATEGORIES, GUIDE_SECTIONS, sectionsByCategory } from "@/modules/ui/help/content";
+import { RELEASE_NOTES, type ReleaseNote } from "@/modules/ui/help/releaseNotes";
 import { HelpAssistant } from "@/modules/ui/help/HelpAssistant";
 
 export const metadata = {
@@ -45,25 +46,33 @@ export default async function HelpPage() {
 
       <HelpAssistant />
 
-      <section aria-labelledby="whats-new" className="rounded-xl border border-border bg-card p-4 sm:p-5">
-        <h2 id="whats-new" className="text-sm font-semibold text-foreground">
-          What&rsquo;s new
+      {/* Release notes (owner request, 2026-10-19): the latest release in full, earlier ones folded. */}
+      <section aria-labelledby="release-notes" className="rounded-xl border border-border bg-card p-4 sm:p-5">
+        <h2 id="release-notes" className="scroll-mt-20 text-sm font-semibold text-foreground">
+          Release notes
         </h2>
-        <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {WHATS_NEW.map((item) => (
-            <li key={item.id} className="min-w-0">
-              <a href={`#${item.id}`} className="text-sm font-medium text-primary hover:underline">
-                {item.label}
-              </a>
-              <p className="mt-0.5 text-xs text-muted-foreground">{item.note}</p>
-            </li>
-          ))}
-        </ul>
+        {RELEASE_NOTES.length ? <Release note={RELEASE_NOTES[0]} /> : <p className="mt-2 text-sm text-muted-foreground">No releases yet.</p>}
+        {RELEASE_NOTES.length > 1 ? (
+          <details className="mt-4 border-t border-border pt-3">
+            <summary className="cursor-pointer text-sm font-medium text-foreground">Earlier releases</summary>
+            <div className="mt-3 space-y-5">
+              {RELEASE_NOTES.slice(1).map((n) => (
+                <Release key={n.id} note={n} />
+              ))}
+            </div>
+          </details>
+        ) : null}
       </section>
 
       <nav aria-label="Guide contents" className="rounded-xl border border-border bg-card p-4 sm:p-5">
         <h2 className="text-sm font-semibold text-foreground">Contents</h2>
         <ul className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3">
+          <li className="min-w-0">
+            <a href="#release-notes" className="flex items-baseline gap-2 text-sm text-muted-foreground hover:text-foreground">
+              <span className="shrink-0 text-xs uppercase tracking-wide text-muted-foreground/70">News</span>
+              <span className="truncate text-foreground">Release notes</span>
+            </a>
+          </li>
           {GUIDE_SECTIONS.map((s) => (
             <li key={s.id} className="min-w-0">
               <a
@@ -116,8 +125,7 @@ export default async function HelpPage() {
                     ))}
                   </div>
                   <p className="mt-3 text-xs text-muted-foreground">Last updated {lastUpdated(s.updated)}</p>
-                  <p className="mt-3 text-xs text-muted-foreground">Last updated {lastUpdated(s.updated)}</p>
-            </article>
+                </article>
               ))}
             </div>
           </section>
@@ -165,6 +173,28 @@ export default async function HelpPage() {
           .
         </p>
       </section>
+    </div>
+  );
+}
+
+/** One release: its date and live version, then each feature linked to the section that explains it. */
+function Release({ note }: { note: ReleaseNote }) {
+  return (
+    <div id={note.id} className="mt-3 scroll-mt-20">
+      <p className="text-sm font-medium text-foreground">
+        {lastUpdated(note.date)} <span className="text-xs font-normal text-muted-foreground">· version {note.commit}</span>
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{note.summary}</p>
+      <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {note.highlights.map((h) => (
+          <li key={h.label} className="min-w-0">
+            <a href={`#${h.section}`} className="text-sm font-medium text-primary hover:underline">
+              {h.label}
+            </a>
+            <p className="mt-0.5 text-xs text-muted-foreground">{h.note}</p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

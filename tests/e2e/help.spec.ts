@@ -116,6 +116,16 @@ test.describe("help centre (signed in)", () => {
     await expect(page.getByRole("heading", { name: "Why do I have no findings?" })).toBeVisible();
   });
 
+  test("shows the latest release notes, each feature linking to its guide section", async ({ page }) => {
+    await page.goto("/help");
+    const notes = page.getByRole("region", { name: "Release notes" });
+    await expect(notes).toBeVisible();
+    await expect(notes.getByText(/version [0-9a-f]{7}/).first()).toBeVisible();
+    const hrefs = await notes.locator('a[href^="#"]').evaluateAll((els) => els.map((e) => (e as HTMLAnchorElement).getAttribute("href") ?? ""));
+    expect(hrefs.length).toBeGreaterThan(0);
+    for (const href of hrefs) await expect(page.locator(href)).toHaveCount(1);
+  });
+
   test("every contents link points at a section that exists on the page", async ({ page }) => {
     // Guards the property the assistant also depends on: a link in the
     // guide must resolve to a real anchor, never a dangling one.

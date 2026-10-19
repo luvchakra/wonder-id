@@ -1371,6 +1371,13 @@ beats exhaustive pre-push verification.
     sets that section's `updated` date. `modules/ui/help/links.test.ts`
     fails when a help link points at a page or section that no longer
     exists.
+  - the release notes (`modules/ui/help/releaseNotes.ts`, Get Help ›
+    Release notes; owner request, 2026-10-19): whenever the owner confirms
+    a new version is live, add one entry at the top, dated that day, with
+    the live production commit and high-level notes on every user-facing
+    feature merged since the previous entry's commit
+    (`git log <previous commit>..<live commit>`), each linked to its help
+    section. Bring the help guide up to date in the same pull request.
 - **CI red:** root-cause it. "Flake" is not a cause. Never skip or disable a test
   to get green. A failure caused by infrastructure (e.g. a hosting rate limit or a
   Supabase outage) gets one pull request comment saying so; it isn't fixed in
