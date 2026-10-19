@@ -75,19 +75,13 @@ export async function listApplicationCatalog(tenantId: string, filter: CatalogFi
   return { rows: await withNames(tenantId, rows), total: count ?? rows.length };
 }
 
-/** Catalog health for the inventory header, as head counts in parallel. */
+/** Catalog health for the inventory header, in one query (migration 0207). */
 export async function getCatalogSummary(tenantId: string) {
   const supabase = await supabaseServer();
-  const head = () => supabase.from("applications").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
-  const [all, active, onboarding, missingOwner, highRisk] = await Promise.all([
-    head(),
-    head().eq("onboarding_status", "ACTIVE"),
-    head().in("onboarding_status", ONBOARDING_IN_PROGRESS),
-    head().not("onboarding_status", "eq", "RETIRED").or("business_owner_identity_id.is.null,technical_owner_identity_id.is.null"),
-    head().in("risk_level", ["high", "critical"]),
-  ]);
-  for (const r of [all, active, onboarding, missingOwner, highRisk]) if (r.error) throw new ApiError(500, "QUERY_FAILED", r.error.message);
-  return { total: all.count ?? 0, active: active.count ?? 0, onboarding: onboarding.count ?? 0, missingOwner: missingOwner.count ?? 0, highRisk: highRisk.count ?? 0 };
+  const { data, error } = await supabase.rpc("application_catalog_counts", { p_tenant: tenantId, p_in_progress: ONBOARDING_IN_PROGRESS });
+  if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  const row = ((data ?? []) as Record<string, number | string>[])[0] ?? {};
+  return { total: Number(row.total ?? 0), active: Number(row.active ?? 0), onboarding: Number(row.onboarding ?? 0), missingOwner: Number(row.missing_owner ?? 0), highRisk: Number(row.high_risk ?? 0) };
 }
 
 export async function getApplicationDetail(tenantId: string, applicationId: string): Promise<CatalogRow | null> {

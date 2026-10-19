@@ -155,28 +155,21 @@ export async function listAccountInventory(tenantId: string, filter: AccountFilt
 
 export type AccountSummary = { total: number; correlated: number; orphan: number; ambiguous: number; dormant: number; privileged: number; missing: number };
 
-/** The counts behind the inventory's cards, in parallel (§15). */
+/**
+ * The counts behind the inventory's cards, in one query (migration 0207).
+ * Its filters are the views of applyView(); keep the two in step.
+ */
 export async function getAccountSummary(tenantId: string, opts: { applicationId?: string; dormantDays?: number } = {}): Promise<AccountSummary> {
-  const supabase = await supabaseServer();
-  const cutoff = dormantCutoff(new Date(), opts.dormantDays ?? (await getTenantConfig(tenantId))["access.dormantDays"]);
-  const count = async (view: AccountView | "correlated") => {
-    let query = supabase.from("accounts").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
-    if (opts.applicationId && UUID_RE.test(opts.applicationId)) query = query.eq("application_id", opts.applicationId);
-    query = view === "correlated" ? query.in("correlation", ["correlated", "manual"]) : applyView(query, view, cutoff);
-    const { count: n, error } = await query;
-    if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
-    return n ?? 0;
-  };
-  const [total, correlated, orphan, ambiguous, dormant, privileged, missing] = await Promise.all([
-    count("all"),
-    count("correlated"),
-    count("orphan"),
-    count("ambiguous"),
-    count("dormant"),
-    count("privileged"),
-    count("missing"),
-  ]);
-  return { total, correlated, orphan, ambiguous, dormant, privileged, missing };
+  const [supabase, days] = await Promise.all([supabaseServer(), opts.dormantDays ?? getTenantConfig(tenantId).then((c) => c["access.dormantDays"])]);
+  const { data, error } = await supabase.rpc("account_summary_counts", {
+    p_tenant: tenantId,
+    p_application: opts.applicationId && UUID_RE.test(opts.applicationId) ? opts.applicationId : null,
+    p_cutoff: dormantCutoff(new Date(), days),
+  });
+  if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  const row = ((data ?? []) as Record<keyof AccountSummary, number | string>[])[0];
+  const n = (k: keyof AccountSummary) => Number(row?.[k] ?? 0);
+  return { total: n("total"), correlated: n("correlated"), orphan: n("orphan"), ambiguous: n("ambiguous"), dormant: n("dormant"), privileged: n("privileged"), missing: n("missing") };
 }
 
 export async function getInventoryAccount(tenantId: string, accountId: string, dormantDaysArg?: number): Promise<InventoryAccount | null> {

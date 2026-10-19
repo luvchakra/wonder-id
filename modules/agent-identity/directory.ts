@@ -229,21 +229,16 @@ export async function listIdentities(tenantId: string, filter: IdentityListFilte
   };
 }
 
-/** How many identities of each type the tenant has (head counts, in parallel). */
+/** How many identities of each type the tenant has (one grouped count, migration 0207). */
 export async function countIdentitiesByType(tenantId: string): Promise<Record<IdentityType, number>> {
   const supabase = await supabaseServer();
-  const counts = await Promise.all(
-    IDENTITY_TYPES.map(async (type) => {
-      const { count, error } = await supabase
-        .from("identities")
-        .select("id", { count: "exact", head: true })
-        .eq("tenant_id", tenantId)
-        .eq("identity_type", type);
-      if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
-      return [type, count ?? 0] as const;
-    }),
-  );
-  return Object.fromEntries(counts) as Record<IdentityType, number>;
+  const { data, error } = await supabase.rpc("identity_type_counts", { p_tenant: tenantId });
+  if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  const counts = Object.fromEntries(IDENTITY_TYPES.map((type) => [type, 0])) as Record<IdentityType, number>;
+  for (const row of (data ?? []) as { identity_type: string; n: number | string }[]) {
+    if (row.identity_type in counts) counts[row.identity_type as IdentityType] = Number(row.n);
+  }
+  return counts;
 }
 
 /** Identity health signals for the overview (IDENTITY-P0-17). */

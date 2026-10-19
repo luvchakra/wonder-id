@@ -2560,3 +2560,65 @@ logs which calls make a page slow, for the next round's fixes.
 **Verified:** typecheck; eslint; unit tests 211 files, 1,891 passed (new
 `lib/db/requestTimings.test.ts`: no query strings, only slow requests
 logged); `next build`.
+
+## 2026-10-19 — Performance round 4: fewer calls per page (migration 0207)
+
+**Found (the round 3 `[perf]` logs on production):** each Supabase call takes
+40–130 ms. Every page made four separate reads to build the access context
+(memberships, roles, group roles, policies). The dashboard and list headers
+made 8 (identities by type), 5 (application catalog) and 7 (account
+inventory) head counts each.
+
+**Changed:**
+1. `my_access_context()` returns the memberships (from `my_memberships()`),
+   the person's own direct roles and group roles, and the active
+   authorization policies in one call. It is SECURITY INVOKER, so RLS applies
+   to every row as with the four reads. Roles and group members are filtered
+   by `auth.uid()` in the function, as before. `getTenantContext()` and
+   `getMyMemberships()` share it per request. A failed read still means
+   "unavailable, nothing permitted", and now covers the organization as well.
+2. `identity_type_counts()`, `application_catalog_counts()` and
+   `account_summary_counts()`: one grouped count each, SECURITY INVOKER, with
+   an explicit tenant filter. They replace `countIdentitiesByType()`,
+   `getCatalogSummary()` and `getAccountSummary()`, which keep the same return
+   shapes. The account filters mirror `applyView()`.
+3. Execute on all four is revoked from `public` and `anon`, and granted to
+   `authenticated` and `service_role`.
+
+**Verified:**
+- Applied to production. As the E2E administrator, `my_access_context()`
+  returned the same numbers of memberships, roles, group rows and policies as
+  the old reads (1/1/0/0).
+- The three count functions match direct counts on the largest tenant.
+- Security advisors: no new findings.
+- Typecheck, eslint on the changed files, and `next build` pass.
+- Unit tests over `lib`, `modules/agent-identity` and
+  `modules/access-governance`: 95 files, 767 passed. In
+  `getTenantContext.test.ts` the mock now answers the single call, and a new
+  test checks that another tenant's role, or a role RLS hides, grants
+  nothing.
+- E2E on Vercel for the session and RBAC specs before merging: see the pull
+  request.
+
+**Measured.** I signed in as the E2E administrator and timed 25 rounds over
+the public API, from a client far from the database, so round trips dominate.
+
+| Read | Median | p90 |
+|---|---|---|
+| A simple one-row read (baseline) | 260–269 ms | — |
+| The old four reads, in parallel | 311–403 ms | 678–778 ms |
+| `my_access_context()` | 259–283 ms | 292–800 ms |
+
+`my_access_context()` costs about the same as the simple read; its p90 was
+292 ms in the second run (800 ms in the first). Inside the database it
+takes about 5 ms per call once a connection is warm. The first call on a
+new connection took 225 ms.
+
+**E2E on Vercel (chosen specs, 16 files):** 174 passed, 1 failed, 2 flaky.
+- `automation-credentials.spec.ts:111` failed: the row did not show
+  "Active" within 20 s. The audit trail shows the approval was accepted
+  (`automation_credential.approved`, success). The same flow passed in the
+  earlier full run on the same code. Its one re-run is recorded in the pull
+  request.
+- `approval-engine` and `birthright`, which failed in the first, cut-off
+  run, passed.
