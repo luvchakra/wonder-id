@@ -2514,3 +2514,30 @@ slow panels with `<Suspense>`.
 1,888 passed (new `lib/tenant/session.test.ts`: a revoked session, another
 user, an unreachable auth server and a bad token are all "nobody");
 `next build`. E2E on Vercel before merging: see the pull request.
+
+## 2026-10-19 — Performance review, round 2 (owner: "continue with the next performance targets")
+
+**After round 1 (#250), measured on production** with `scripts/perf-pages.mjs`:
+median page server time 1.07 s over 18 pages (before: about 1.2 s); the extra
+cost of a session cookie on a public page fell from about 450 ms to about
+185 ms; a signed-in API call from 858 ms to 710 ms. The migration 0206 fix
+(memberships in a fixed order) shipped in the same pull request.
+
+**Round 2:**
+1. The proxy sends `Server-Timing: claims, host, limits` (durations only), so
+   production shows where its remaining ~185 ms goes. Next decision from that
+   data: the JWKS fetch inside `getClaims()`, or the cached host and
+   session-policy reads from the edge.
+2. `getTenantContext()` no longer waits for the auth server's live-session
+   check before its reads: the reads need only the verified token's user id
+   (`getSessionClaims()`, new) and run alongside `getSessionUser()`; nothing is
+   returned unless the session is live (new test: a revoked session gets no
+   context). `getMyMemberships()`, used on its own by a few routes, still
+   requires the live check.
+3. The customer layout starts the reads that need only the person (profile,
+   vendor-console check, environments) alongside the tenant context, each
+   with its "not shown" fallback.
+
+**Verified:** typecheck; eslint on the changed files; unit tests 210 files,
+1,889 passed (`lib/tenant/getTenantContext.test.ts` +1); `next build`. E2E on
+Vercel for the session specs before merging: see the pull request.

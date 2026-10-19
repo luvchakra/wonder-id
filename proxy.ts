@@ -186,14 +186,25 @@ export async function proxy(request: NextRequest) {
   // membership check. The session limits (cached per user) are read in the
   // same wave, so the proxy waits for at most one round trip.
   const hostTarget = parseTenantHost(request.headers.get("host"), baseAppHost());
+  // Server-Timing (performance review 2026-10-19): how long the proxy's own
+  // steps took, in milliseconds, so production shows where its time goes.
+  // Durations only; nothing about the session or the organization.
+  const t0 = performance.now();
   const { data: claimsData, error: authError } = await supabase.auth.getClaims();
+  const tClaims = performance.now() - t0;
   const claims = claimsData?.claims;
   const user = claims?.sub ? { id: claims.sub, app_metadata: (claims.app_metadata ?? {}) as { automation?: unknown } } : null;
   const enforced = Boolean(user) && !UNENFORCED_PATHS.some((p) => pathname.startsWith(p));
-  const [hostLookup, sessionLimits] = await Promise.all([
-    hostTarget.kind === "subdomain" ? lookUpTenantHost(supabase, hostTarget.label) : Promise.resolve(null),
-    enforced && user ? sessionLimitsFor(supabase, user.id) : Promise.resolve(GLOBAL_SESSION_LIMITS),
+  const timed = async <T,>(p: Promise<T>): Promise<[T, number]> => {
+    const start = performance.now();
+    const value = await p;
+    return [value, performance.now() - start];
+  };
+  const [[hostLookup, tHost], [sessionLimits, tLimits]] = await Promise.all([
+    timed(hostTarget.kind === "subdomain" ? lookUpTenantHost(supabase, hostTarget.label) : Promise.resolve(null)),
+    timed(enforced && user ? sessionLimitsFor(supabase, user.id) : Promise.resolve(GLOBAL_SESSION_LIMITS)),
   ]);
+  response.headers.set("Server-Timing", `claims;dur=${tClaims.toFixed(1)}, host;dur=${tHost.toFixed(1)}, limits;dur=${tLimits.toFixed(1)}`);
 
   // FOUNDATION-P0-31 — an automation credential's backing member never
   // holds a browser session: its password is never shown, and should a

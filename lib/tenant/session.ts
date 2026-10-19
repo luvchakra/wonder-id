@@ -31,23 +31,37 @@ export type SessionUser = {
  *
  * `cache()` scopes the result to the request: the layout, the page, and
  * every service they call see the same value with one check.
+ * getTenantContext() runs it alongside its own reads (2026-10-19).
  */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
+  const claimed = await getSessionClaims();
+  if (!claimed) return null;
+  // An automation credential's token was issued by the resolver this request: nothing to revoke.
+  if (claimed.automation) return claimed.user;
+  const supabase = await supabaseServer();
+  const live = await supabase.auth.getUser();
+  // A revoked or unknown session: no user, whatever the token's signature says.
+  if (live.error || live.data.user?.id !== claimed.user.id) return null;
+  return claimed.user;
+});
+
+/**
+ * The token's verified claims only, without asking the auth server whether
+ * the session still exists. Local and fast; for starting reads that only
+ * need the user id while getSessionUser()'s check runs alongside. Nothing
+ * may be returned or shown from those reads until getSessionUser() agrees
+ * (getTenantContext() waits for both). Everything else uses getSessionUser().
+ */
+export const getSessionClaims = cache(async (): Promise<{ user: SessionUser; automation: boolean } | null> => {
   const supabase = await supabaseServer();
   // FOUNDATION-P0-31 — an automation credential's call carries its
-  // backing member's token, just issued by the resolver this request; the
-  // client holds no session to read it from.
+  // backing member's token, just issued by the resolver; the client holds
+  // no session to read it from.
   const { getAutomationAccess } = await import("@/lib/security/automationCredentials");
   const automation = await getAutomationAccess();
-  if (automation) {
-    const { data, error } = await supabase.auth.getClaims(automation.accessToken);
-    return error || !data?.claims?.sub ? null : toSessionUser(data.claims);
-  }
-  const [{ data, error }, live] = await Promise.all([supabase.auth.getClaims(), supabase.auth.getUser()]);
+  const { data, error } = automation ? await supabase.auth.getClaims(automation.accessToken) : await supabase.auth.getClaims();
   if (error || !data?.claims?.sub) return null;
-  // A revoked or unknown session: no user, whatever the token's signature says.
-  if (live.error || live.data.user?.id !== data.claims.sub) return null;
-  return toSessionUser(data.claims);
+  return { user: toSessionUser(data.claims), automation: Boolean(automation) };
 });
 
 function toSessionUser(claims: { sub: string; email?: unknown; aal?: unknown }): SessionUser {
