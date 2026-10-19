@@ -2599,3 +2599,26 @@ inventory) head counts each.
   nothing.
 - E2E on Vercel for the session and RBAC specs before merging: see the pull
   request.
+
+**Measured.** I signed in as the E2E administrator and timed 25 rounds over
+the public API, from a client far from the database, so round trips dominate.
+
+| Read | Median | p90 |
+|---|---|---|
+| A simple one-row read (baseline) | 260–269 ms | — |
+| The old four reads, in parallel | 311–403 ms | 678–778 ms |
+| `my_access_context()` | 259–283 ms | 292–800 ms |
+
+`my_access_context()` costs about the same as the simple read; its p90 was
+292 ms in the second run (800 ms in the first). Inside the database it
+takes about 5 ms per call once a connection is warm. The first call on a
+new connection took 225 ms.
+
+**E2E on Vercel (chosen specs, 16 files):** 174 passed, 1 failed, 2 flaky.
+- `automation-credentials.spec.ts:111` failed: the row did not show
+  "Active" within 20 s. The audit trail shows the approval was accepted
+  (`automation_credential.approved`, success). The same flow passed in the
+  earlier full run on the same code. Its one re-run is recorded in the pull
+  request.
+- `approval-engine` and `birthright`, which failed in the first, cut-off
+  run, passed.
