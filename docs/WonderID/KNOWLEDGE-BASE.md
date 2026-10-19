@@ -689,6 +689,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 19 Oct 2026 | Get Help has Release notes: each release, newest first, with its date, version and the features it brought, each linked to its help section. It replaces the short "What's new" list. |
 | 19 Oct 2026 | The in-app help guide is up to date with recent changes: approval workflows, request numbers, record numbers in page addresses, application tabs and requestable entitlements, self-approval of your own onboarding by an administrator, account name formats, the guided connection-type editor, MCP tools that are AI agents, a source's default ID role, the ID Roles tab, and what "couldn't check" messages mean. |
 | 18 Oct 2026 | Approval workflows: reusable approval patterns with several levels (manager, manager's manager, owners, a named person, a group, access managers), all or any one per level, levels by risk; a request policy chooses one, so many applications share it. |
 | 18 Oct 2026 | Separation of duties over access: rules on access one identity must not hold together, checked at request, assignment and approval; identities already holding both are listed. |

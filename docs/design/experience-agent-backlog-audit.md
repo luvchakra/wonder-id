@@ -4368,3 +4368,27 @@ audit field changes, the control reports, the mobile More button.
 
 **Verified:** `modules/ui/help` tests 17 passed (links resolve); eslint and
 typecheck clean. No E2E asserts the changed sentences.
+
+## 2026-10-19 — Release notes in Get Help (owner request)
+
+Owner request: a "Release Notes" section in the help, with a new entry each
+time the owner confirms a new version is live, covering every feature
+released since the previous entry.
+
+- `modules/ui/help/releaseNotes.ts`: `RELEASE_NOTES`, newest first; each
+  entry has an id (`release-YYYY-MM-DD`), the date, the live production
+  commit, a one-line summary and highlights linked to guide sections.
+- `/help`: the Release notes card replaces the hand-kept "What's new" list
+  (one place for what is new, §19.5): the latest release in full, earlier
+  ones under "Earlier releases"; a Contents link. `WHATS_NEW` removed.
+  Also fixed "Last updated" printed twice on every guide article.
+- First entry, 19 Oct 2026 at c90afe4: the features live from 14 to 19 Oct
+  (15 highlights), matching the knowledge base's revision history.
+- The rule is in CLAUDE.md §19.7: on the owner's confirmation that a
+  version is live, add an entry from `git log <previous commit>..<live>`,
+  and bring the help guide up to date in the same pull request.
+- `links.test.ts`: every highlight links to an existing section; entries
+  are newest first, ids unique and well formed, commit present.
+
+**Verified:** `modules/ui/help` and `lib/ai/helpAnswer.test.ts`, 33 passed;
+typecheck and eslint clean; `next build` passed.
