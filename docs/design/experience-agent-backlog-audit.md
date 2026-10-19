@@ -4333,3 +4333,38 @@ worker, and no email linked to help.
 - by hand on the production build: signed out, `/help`, `/help?q=x` and
   `/help/anything` answer 307 to sign-in with no guide text in the body;
   the API answers 401; the landing page has no `/help` link.
+
+## 2026-10-19 — Help guide brought up to date (owner request)
+
+Owner request: update the help guide with the latest features. The guide
+was refreshed on 16 Oct (#235); every merge since was checked against it,
+and the changes from 14 and 15 Oct that the refresh missed.
+
+Added or corrected in `modules/ui/help/content.ts`, each article's
+`updated` set to 2026-10-19, in the UI's own words:
+- Finding your way around: record pages open at their short number, old
+  links redirect; create forms live in the list's Actions menu.
+- Requesting and approving access: request numbers (REQ and nine digits,
+  with the barcode).
+- Applications and onboarding: the page's tabs; entitlements added by hand
+  under a type, edit/disable/delete; "Requestable" vs "Needs a request
+  policy"; the account name format; corrected the approval rule, since an
+  administrator may approve their own submission with a note, recorded as
+  self-approved (owner decision 14 Oct).
+- Provisioning tasks: new accounts named by the format; standard access to
+  the everyday account, admin access waits for a person.
+- Connecting source systems: the guided Form beside the JSON and "Try it
+  against a system"; MCP tools that are AI agents, "Declared by the server".
+- Agent discovery: MCP agent tools appear there.
+- Authoritative identity sources: the Default ID role invitation.
+- Users and membership: the ID Roles tab on a person's page.
+- FAQ "Why can't I see…": "We couldn't check your access".
+- Rogue accounts: "could not be checked just now".
+
+Already covered, checked: approval workflows, SoD over access, business and
+IT roles, merges, policy versions, configuration export/import, campaign
+calendar and analytics, owner reviews, identity rules, agent delegation,
+audit field changes, the control reports, the mobile More button.
+
+**Verified:** `modules/ui/help` tests 17 passed (links resolve); eslint and
+typecheck clean. No E2E asserts the changed sentences.
