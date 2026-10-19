@@ -2455,3 +2455,62 @@ and §19.8 and ORCHESTRATION.md say so.
 **Verified:** eslint clean on the changed files. Typecheck is clean except
 for product screenshots missing from this container's checkout
 (`app/welcome`), which CI has.
+
+## 2026-10-19 — Performance review (owner request: "make the application fast and snappier")
+
+**Measured first, on production, signed in as the E2E administrator**
+(`scripts/perf-pages.mjs`, added here). Before: every page's server HTML took
+1.1–2.0 s (median about 1.2 s over 20 routes). Breakdown:
+- an unauthenticated request costs about 300 ms from the test client (network);
+- the same public page costs about 450 ms more once a session cookie is present:
+  the proxy's `auth.getUser()` round trip. The proxy runs at Vercel's edge near
+  the visitor (`x-vercel-id: iad1::sin1`), not beside Supabase in Singapore;
+- each further sequential Supabase round trip in a route costs about 60 ms;
+- Supabase itself answers in about 36 ms from the client on a warm connection,
+  and the hot queries take 1–15 ms in the database (`pg_stat_statements`).
+  `current_tenant_ids()` costs 16 ms on a new connection and 0.6 ms after.
+
+**Changed:**
+1. `proxy.ts` verifies the session locally (`getClaims()`; tokens are ES256)
+   and makes no auth-server call unless a token must be refreshed. The host
+   lookup and the session limits (both cached) run in one wave.
+2. `getSessionUser()` (`lib/tenant/session.ts`) is where a revoked session is
+   refused: `getClaims()` and `getUser()` in parallel, both required. Global
+   sign-out stays immediate. Every route that reads data goes through it (checked:
+   nothing in `app/` queries without a session check).
+3. Pages: All Requests runs its sweeps in `after()` and reads what waits for
+   the caller in the same wave as the caller's identity. The package expiry
+   sweep reads its two lists together. The agent page's contract comparison
+   explains each application once, in parallel, and is cached for the
+   request (the posture panel reused it). The posture runs in three waves
+   instead of twelve. The access ledger refresh reads its evidence and stored
+   rows together and updates ten rows at a time. Controls reads its lists
+   alongside the settings.
+4. Bug found by the review: a cancelled request left its approval steps open,
+   so the timeout sweep re-read them on every view and could crowd out real
+   timeouts past 200. Cancelling now skips them; the sweep filters to waiting
+   requests in the database and reads each policy once.
+5. Migration 0205 (applied): the audit log's action filter
+   `(tenant_id, action, created_at)` (1.1 s average before); partial indexes
+   for the two badge counts on every page; the eleven foreign keys the advisor
+   listed without an index; one stale approval step repaired. Advisors: no
+   unindexed foreign keys left.
+6. CLAUDE.md §15.1: the rules from this review, binding for new work.
+
+**Kept as it was, on purpose:** the request page's and the leaver page's
+pre-render sweeps (a decision on the page depends on them); the identity page's
+ledger refresh (shown right after an approval; made cheaper instead); the
+tenant context is never cached across requests (revocation applies on the
+next request).
+
+**Left for later (page audit findings not done here):** the agent discovery
+inbox's wide reads; the home page's 5,000-row finding summaries (an RPC
+grouping by day would replace them); `/risk`'s unbounded open-findings read;
+the account summary's seven counts; listing owners tenant-wide on the agent
+page; lean group lists for filters; streaming the agent and identity pages'
+slow panels with `<Suspense>`.
+
+**Verified:** typecheck; eslint on the changed files; unit tests 210 files,
+1,888 passed (new `lib/tenant/session.test.ts`: a revoked session, another
+user, an unreachable auth server and a bad token are all "nobody");
+`next build`. E2E on Vercel before merging: see the pull request.

@@ -37,14 +37,33 @@ function na(dimension: GovernanceDimensionResult["dimension"], reason: string): 
  * Lifecycle/Compliance controls/Evidence completeness) are covered below.
  */
 export async function getGovernancePosture(tenantId: string, agentId: string): Promise<GovernancePosture> {
-  const agent = await getAgent(tenantId, agentId);
+  // Performance review (2026-10-19): the independent reads run together, in
+  // three waves instead of a dozen sequential ones; the dimensions and their
+  // order are unchanged.
+  const [agent, contract, identities, certificationHistory, exceptions] = await Promise.all([
+    getAgent(tenantId, agentId),
+    getAgentContract(agentId, tenantId),
+    listAgentIdentities(tenantId, agentId),
+    getCertificationHistory(tenantId, agentId),
+    listGovernanceExceptions(tenantId, { agentId }),
+  ]);
   if (!agent) throw new ApiError(404, "NOT_FOUND", "Agent not found");
-
-  const contract = await getAgentContract(agentId, tenantId);
+  const needsControls = Boolean(contract && contract.requiredComplianceControls.length > 0);
+  const [ownershipIssues, contractReads] = await Promise.all([
+    getOwnershipIssues(tenantId, agentId, agent.criticality),
+    contract
+      ? Promise.all([
+          compareAccessToContract(tenantId, agentId),
+          getDid(tenantId, agentId),
+          listPolicyEvaluations(tenantId, agentId),
+          needsControls ? listControlFrameworks().then((frameworks) => Promise.all(frameworks.map((f) => listControls(f.id)))).then((c) => c.flat()) : Promise.resolve([]),
+          needsControls ? listControlMappings(tenantId) : Promise.resolve([]),
+        ])
+      : Promise.resolve(null),
+  ]);
   const dimensions: GovernanceDimensionResult[] = [];
 
   // 1. Identity
-  const identities = await listAgentIdentities(tenantId, agentId);
   const activeIdentities = identities.filter(
     (i) => i.status === "active" && (i.confidence === "confirmed" || i.confidence === "probable"),
   );
@@ -55,7 +74,6 @@ export async function getGovernancePosture(tenantId: string, agentId: string): P
   );
 
   // 2. Ownership
-  const ownershipIssues = await getOwnershipIssues(tenantId, agentId, agent.criticality);
   dimensions.push(
     ownershipIssues.length === 0
       ? { dimension: "ownership", status: "governed", reason: "No open ownership issues" }
@@ -78,7 +96,7 @@ export async function getGovernancePosture(tenantId: string, agentId: string): P
     dimensions.push({ dimension: "lifecycle", status: "gap", reason: `Lifecycle state ${agent.lifecycleState} is pre-approval — not yet governed` });
   }
 
-  if (!contract) {
+  if (!contract || !contractReads) {
     // Every remaining dimension needs an active contract to evaluate against.
     dimensions.push(na("access", "No active contract to compare effective access against"));
     dimensions.push(na("action_authority", "No active contract to classify actions against"));
@@ -88,7 +106,7 @@ export async function getGovernancePosture(tenantId: string, agentId: string): P
     dimensions.push(na("compliance_controls", "No active contract to read required compliance controls from"));
   } else {
     // 5. Access (SHOULD vs CAN)
-    const comparisonRows = await compareAccessToContract(tenantId, agentId);
+    const [comparisonRows, did, evaluations, allControls, mappings] = contractReads;
     const excessive = comparisonRows.filter((r) => r.classification === "excessive");
     dimensions.push(
       excessive.length === 0
@@ -97,7 +115,6 @@ export async function getGovernancePosture(tenantId: string, agentId: string): P
     );
 
     // Runtime activity, shared by action_authority and runtime_monitoring.
-    const did = await getDid(tenantId, agentId);
     const observedActions = [...new Set(did.tuples.map((t) => t.action))];
     const totalObservedEvents = did.tuples.reduce((sum, t) => sum + t.eventCount, 0);
 
@@ -145,7 +162,6 @@ export async function getGovernancePosture(tenantId: string, agentId: string): P
     }
 
     // 9. Policy compliance
-    const evaluations = await listPolicyEvaluations(tenantId, agentId);
     const latestByPolicy = new Map<string, PolicyEvaluationResult>();
     for (const e of evaluations) if (!latestByPolicy.has(e.policyId)) latestByPolicy.set(e.policyId, e);
     const violations = [...latestByPolicy.values()].filter((e) => e.result === "violation");
@@ -163,10 +179,7 @@ export async function getGovernancePosture(tenantId: string, agentId: string): P
     if (contract.requiredComplianceControls.length === 0) {
       dimensions.push(na("compliance_controls", "No required compliance controls declared on the contract"));
     } else {
-      const frameworks = await listControlFrameworks();
-      const allControls = (await Promise.all(frameworks.map((f) => listControls(f.id)))).flat();
       const controlsByRef = new Map(allControls.map((c) => [c.controlRef, c]));
-      const mappings = await listControlMappings(tenantId);
       const mappingByControlId = new Map(mappings.map((m) => [m.controlId, m]));
       const gaps: string[] = [];
       for (const ref of contract.requiredComplianceControls) {
@@ -183,7 +196,6 @@ export async function getGovernancePosture(tenantId: string, agentId: string): P
   }
 
   // 11. Certification (independent of contract presence)
-  const certificationHistory = await getCertificationHistory(tenantId, agentId);
   if (agent.lifecycleState === "CERTIFICATION_DUE") {
     dimensions.push({ dimension: "certification", status: "gap", reason: "Certification is overdue" });
   } else if (certificationHistory.length === 0) {
@@ -201,7 +213,7 @@ export async function getGovernancePosture(tenantId: string, agentId: string): P
   );
 
   const gaps = dimensions.filter((d) => d.status === "gap");
-  const activeExceptions = (await listGovernanceExceptions(tenantId, { agentId })).filter((e) => e.status === "active");
+  const activeExceptions = exceptions.filter((e) => e.status === "active");
 
   let status: GovernancePostureStatus;
   if (agent.lifecycleState === "SUSPENDED") {

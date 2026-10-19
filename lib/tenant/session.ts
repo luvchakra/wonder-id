@@ -14,38 +14,47 @@ export type SessionUser = {
  * The authenticated user for the current request, resolved once and shared
  * by everything rendered in it.
  *
- * Why `getClaims()` and not `getUser()`: `getUser()` is a network round
- * trip to GoTrue on every call, and this app was making it four or five
- * times per page (proxy, layout, tenant context, platform-admin check,
- * then the page again). `getClaims()` verifies the access token's ES256
- * signature locally against the project's JWKS — which auth-js caches
- * globally across client instances — so after the first request it costs
- * about a millisecond.
+ * Two checks, run in parallel, both required:
+ * - `getClaims()` verifies the access token's ES256 signature locally
+ *   against the project's JWKS (cached by auth-js) and gives the claims we
+ *   use, including the assurance level;
+ * - `getUser()` asks the auth server whether the session still exists.
+ *   Logout is global and immediate by product decision (user, 2026-09-17):
+ *   a revoked session's token keeps a valid signature until it expires, and
+ *   only the auth server knows it was revoked.
  *
- * This is safe only because proxy.ts has ALREADY asked the auth server
- * about this exact session before the route ran, and turned it away if
- * the server rejected it (a revoked session's token still has a valid
- * signature until it expires — logout is global and immediate by product
- * decision, so that check must be a real round trip, once). Here we only
- * re-derive identity from a token the proxy just validated. Do not use
- * this from anything that does not sit behind the proxy.
+ * Performance review (2026-10-19): the auth-server question used to be the
+ * proxy's, but the proxy runs at the edge near the visitor and the round
+ * trip cost about 450 ms there. Here it runs in sin1 beside Supabase, in
+ * parallel with the local check, so it adds a few milliseconds. The proxy
+ * now only verifies the signature and refreshes expired tokens.
  *
  * `cache()` scopes the result to the request: the layout, the page, and
- * every service they call see the same value with one verification.
+ * every service they call see the same value with one check.
  */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const supabase = await supabaseServer();
   // FOUNDATION-P0-31 — an automation credential's call carries its
-  // backing member's token, just issued by the resolver; the client holds
-  // no session to read it from.
+  // backing member's token, just issued by the resolver this request; the
+  // client holds no session to read it from.
   const { getAutomationAccess } = await import("@/lib/security/automationCredentials");
   const automation = await getAutomationAccess();
-  const { data, error } = automation ? await supabase.auth.getClaims(automation.accessToken) : await supabase.auth.getClaims();
+  if (automation) {
+    const { data, error } = await supabase.auth.getClaims(automation.accessToken);
+    return error || !data?.claims?.sub ? null : toSessionUser(data.claims);
+  }
+  const [{ data, error }, live] = await Promise.all([supabase.auth.getClaims(), supabase.auth.getUser()]);
   if (error || !data?.claims?.sub) return null;
-  const email = typeof data.claims.email === "string" ? data.claims.email : null;
-  const aal = data.claims.aal === "aal2" ? "aal2" : data.claims.aal === "aal1" ? "aal1" : null;
-  return { id: data.claims.sub, email, aal };
+  // A revoked or unknown session: no user, whatever the token's signature says.
+  if (live.error || live.data.user?.id !== data.claims.sub) return null;
+  return toSessionUser(data.claims);
 });
+
+function toSessionUser(claims: { sub: string; email?: unknown; aal?: unknown }): SessionUser {
+  const email = typeof claims.email === "string" ? claims.email : null;
+  const aal = claims.aal === "aal2" ? "aal2" : claims.aal === "aal1" ? "aal1" : null;
+  return { id: claims.sub, email, aal };
+}
 
 /**
  * The signed-in user's profile row, once per request. The shell shows the

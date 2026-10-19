@@ -1182,10 +1182,16 @@ export async function revokeAssignment(tenantId: string, actorId: string, assign
  */
 export async function sweepPackageExpiry(tenantId: string | null, now = new Date()): Promise<{ expired: number; removed: number }> {
   const admin = supabaseServiceRole();
+  // The two reads are independent: one round trip, not two (performance review 2026-10-19).
+  // An assignment in both lists is ended once; the second endAssignment finds it no longer live.
   let query = admin.from("access_package_assignments").select("id, tenant_id, package_id, identity_id").in("status", LIVE).lt("expires_at", now.toISOString()).order("expires_at").limit(200);
   if (tenantId) query = query.eq("tenant_id", tenantId);
-  const { data, error } = await query;
+  // WID-H09: a mover's birthright package nobody kept by its review date is removed.
+  let lapsed = admin.from("access_package_assignments").select("id, tenant_id, package_id, identity_id").in("status", LIVE).lt("review_due_at", now.toISOString()).order("review_due_at").limit(200);
+  if (tenantId) lapsed = lapsed.eq("tenant_id", tenantId);
+  const [{ data, error }, { data: overdue, error: overdueError }] = await Promise.all([query, lapsed]);
   if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  if (overdueError) throw new ApiError(500, "QUERY_FAILED", overdueError.message);
   let expired = 0;
   for (const a of data ?? []) {
     if (await endAssignment(a.tenant_id as string, null, a.id as string, "expired", "The assignment reached its end date")) {
@@ -1193,11 +1199,6 @@ export async function sweepPackageExpiry(tenantId: string | null, now = new Date
       await writeAudit({ tenantId: a.tenant_id as string, actorId: null, actorType: "system", action: "access.package_expired", objectType: "access_package_assignment", objectId: a.id as string, outcome: "success", metadata: { packageId: a.package_id, identityId: a.identity_id } });
     }
   }
-  // WID-H09: a mover's birthright package nobody kept by its review date is removed.
-  let lapsed = admin.from("access_package_assignments").select("id, tenant_id, package_id, identity_id").in("status", LIVE).lt("review_due_at", now.toISOString()).order("review_due_at").limit(200);
-  if (tenantId) lapsed = lapsed.eq("tenant_id", tenantId);
-  const { data: overdue, error: overdueError } = await lapsed;
-  if (overdueError) throw new ApiError(500, "QUERY_FAILED", overdueError.message);
   let removed = 0;
   for (const a of overdue ?? []) {
     if (await endAssignment(a.tenant_id as string, null, a.id as string, "revoked", "Not kept after the person moved: they no longer qualify for this birthright package")) {

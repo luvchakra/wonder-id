@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { requirePermission } from "@/lib/rbac/requirePermission";
 import {
   listFulfilmentTasks,
@@ -56,14 +57,25 @@ export default async function AccessRequestsPage({ searchParams }: { searchParam
   let myTasks: FulfilmentTask[] = [];
   if (asked === null || asked === "waiting") {
     // Steps past their time are escalated or expired, and waiting requests
-    // without a chain get one, before anyone is shown what waits for them.
-    await sweepApprovalTimeouts(ctx.tenantId!);
-    await repairApprovalChains(ctx.tenantId!, ctx.userId);
-    // ACCESS-P0-42: a group's tasks wait for each member.
-    const [me, groupIds] = await Promise.all([getIdentityForUser(ctx.tenantId!, ctx.userId), activeGroupIdsOf(ctx.tenantId!, ctx.userId)]);
+    // without a chain get one. Performance review (2026-10-19): after the
+    // page is sent, not before (the daily job runs them too, and a
+    // request's own page still sweeps before anyone decides there).
+    const tenantId = ctx.tenantId!;
+    const userId = ctx.userId;
+    after(async () => {
+      try {
+        await sweepApprovalTimeouts(tenantId);
+        await repairApprovalChains(tenantId, userId);
+      } catch (err) {
+        console.error("access requests: background sweep failed", { code: err instanceof ApiError ? err.code : "UNEXPECTED" });
+      }
+    });
+    // ACCESS-P0-42: a group's tasks wait for each member. What waits for the caller is read in the same wave.
+    const awaitingPromise = listRequestIdsAwaiting(tenantId, { userId, canApproveAsAccessManager: canApprove });
+    const [me, groupIds] = await Promise.all([getIdentityForUser(tenantId, userId), activeGroupIdsOf(tenantId, userId)]);
     [awaiting, myTasks] = await Promise.all([
-      listRequestIdsAwaiting(ctx.tenantId!, { userId: ctx.userId, canApproveAsAccessManager: canApprove }),
-      listFulfilmentTasks(ctx.tenantId!, { view: "todo", forPerson: { userId: ctx.userId, identityId: me?.id ?? null, canApprove, groupIds } }),
+      awaitingPromise,
+      listFulfilmentTasks(tenantId, { view: "todo", forPerson: { userId, identityId: me?.id ?? null, canApprove, groupIds } }),
     ]);
   }
   // Without a choice: what waits for the caller, when anything does (or always for an approver); else their own.

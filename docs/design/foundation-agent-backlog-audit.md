@@ -3737,3 +3737,9 @@ project; no new advisor item. Typecheck and eslint clean.
 **Left out:** the E2E bootstrap describe stays skipped unless the run lists
 the IAM admin; when it is listed, that account now also needs a
 mail-confirmed address.
+
+## 2026-10-19 — Performance review (cross-module; detail in the QA audit log)
+
+The owner asked for the app to be faster. This module's part, with numbers,
+verification and what was left out, is in `docs/design/qa-agent-backlog-audit.md`
+(2026-10-19). The rules that came out of it are CLAUDE.md §15.1.

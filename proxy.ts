@@ -164,32 +164,36 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // This is the ONE place per request that asks the auth server whether
-  // the session is still good. Everything rendered after it — the layout,
-  // the page, the module services — verifies the token locally instead
-  // (lib/tenant/session.ts), so a page costs one GoTrue round trip rather
-  // than the four or five it used to.
+  // The session is read here with getClaims(): the access token's ES256
+  // signature is verified locally against the project's JWKS (cached), and
+  // the network is used only when the token has expired and @supabase/ssr
+  // refreshes it (the new cookies are written here, before the route runs).
   //
-  // It has to be a real round trip and not a signature check, because of
-  // a product decision (user, 2026-09-17): logging out is global and takes
-  // effect immediately in every other session. A revoked session's access
-  // token still has a valid signature until it expires; only the auth
-  // server knows it was revoked. getUser() also lets @supabase/ssr rotate
-  // an expired token's cookies here, before the route runs.
+  // Performance review (2026-10-19): this proxy runs at Vercel's edge, near
+  // the visitor, not beside the database in sin1, so an auth-server round
+  // trip from here cost about 450 ms per signed-in request. The check that
+  // a session has not been revoked (logout is global and immediate, user
+  // decision 2026-09-17) now happens in the route instead, in sin1 beside
+  // Supabase: getSessionUser() (lib/tenant/session.ts) asks the auth server
+  // once per request, in parallel with work it already does. Every route
+  // that reads data goes through it (requirePermission, getTenantContext,
+  // the layouts), so a revoked session still reads nothing.
   //
   // FOUNDATION-P0-22 — on a tenant address (`<slug>.<BASE_APP_HOST>`), the
-  // tenant it names is looked up alongside the session check (in parallel,
-  // cached briefly per host). An address that names no tenant is a 404 on
-  // every path; a failed lookup fails closed as "unavailable". The address
-  // never authorizes anything: that is still the membership check.
+  // tenant it names is looked up (cached briefly per host). An address that
+  // names no tenant is a 404 on every path; a failed lookup fails closed as
+  // "unavailable". The address never authorizes anything: that is still the
+  // membership check. The session limits (cached per user) are read in the
+  // same wave, so the proxy waits for at most one round trip.
   const hostTarget = parseTenantHost(request.headers.get("host"), baseAppHost());
-  const [
-    {
-      data: { user },
-      error: authError,
-    },
-    hostLookup,
-  ] = await Promise.all([supabase.auth.getUser(), hostTarget.kind === "subdomain" ? lookUpTenantHost(supabase, hostTarget.label) : Promise.resolve(null)]);
+  const { data: claimsData, error: authError } = await supabase.auth.getClaims();
+  const claims = claimsData?.claims;
+  const user = claims?.sub ? { id: claims.sub, app_metadata: (claims.app_metadata ?? {}) as { automation?: unknown } } : null;
+  const enforced = Boolean(user) && !UNENFORCED_PATHS.some((p) => pathname.startsWith(p));
+  const [hostLookup, sessionLimits] = await Promise.all([
+    hostTarget.kind === "subdomain" ? lookUpTenantHost(supabase, hostTarget.label) : Promise.resolve(null),
+    enforced && user ? sessionLimitsFor(supabase, user.id) : Promise.resolve(GLOBAL_SESSION_LIMITS),
+  ]);
 
   // FOUNDATION-P0-31 — an automation credential's backing member never
   // holds a browser session: its password is never shown, and should a
@@ -289,14 +293,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  if (user && !UNENFORCED_PATHS.some((p) => request.nextUrl.pathname.startsWith(p))) {
+  if (user && enforced) {
     const startedAt = request.cookies.get(SESSION_STARTED_COOKIE)?.value;
     const lastSeen = request.cookies.get(SESSION_LAST_SEEN_COOKIE)?.value;
     const { expired } = checkSessionExpiry(
       startedAt ? Number(startedAt) : null,
       lastSeen ? Number(lastSeen) : null,
       Date.now(),
-      await sessionLimitsFor(supabase, user.id),
+      sessionLimits,
     );
 
     if (expired) {

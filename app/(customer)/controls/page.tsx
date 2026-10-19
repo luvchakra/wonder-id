@@ -29,15 +29,17 @@ export default async function ControlCenterPage() {
   }
   const tenantId = ctx.tenantId!;
   const can = (...keys: string[]) => keys.some((k) => ctx.permissions.includes(k));
-  // The organization's window (Global Configuration).
-  const conflictWindowDays = (await getTenantConfig(tenantId))["sod.conflictWindowDays"];
-  const since = windowStart(conflictWindowDays);
-  const [policies, sodRules, conflicts, requestPolicies, authzPolicies] = await Promise.all([
+  // The organization's window (Global Configuration); only the conflicts read waits for it.
+  const config = getTenantConfig(tenantId);
+  const [policies, sodRules, conflicts, requestPolicies, authzPolicies, conflictWindowDays] = await Promise.all([
     listPolicies(tenantId),
     listSoDRules(tenantId),
-    can("audit.read") ? listAuditLogs(tenantId, { action: SOD_CONFLICT_ACTION, from: since }, null, CONFLICT_CAP) : Promise.resolve(null),
+    can("audit.read")
+      ? config.then((c) => listAuditLogs(tenantId, { action: SOD_CONFLICT_ACTION, from: windowStart(c["sod.conflictWindowDays"]) }, null, CONFLICT_CAP))
+      : Promise.resolve(null),
     can("access.manage") ? listRequestPolicies(tenantId) : Promise.resolve(null),
     can("permissions.view", "tenant.security.manage") ? listAuthorizationPolicies(tenantId) : Promise.resolve(null),
+    config.then((c) => c["sod.conflictWindowDays"]),
   ]);
 
   const inEffect = policies.filter((p) => p.status === "active");
