@@ -2541,3 +2541,22 @@ cost of a session cookie on a public page fell from about 450 ms to about
 **Verified:** typecheck; eslint on the changed files; unit tests 210 files,
 1,889 passed (`lib/tenant/getTenantContext.test.ts` +1); `next build`. E2E on
 Vercel for the session specs before merging: see the pull request.
+
+## 2026-10-19 — Performance round 3: where page render time goes
+
+**After round 2 (#251), on production:** the proxy's `Server-Timing` shows its
+steps at 1–4 ms on signed-in requests (`claims` about 1 ms: the token is
+verified locally). One cache miss of the organization-address lookup cost
+688 ms from the edge, then 0. Median page server time 969 ms over 18 pages
+(1,073 after round 1, about 1.2 s before). About 300 ms of that is the test
+client's network; the rest is the route's own render.
+
+**Round 3 (measurement):** `lib/db/requestTimings.ts` records each Supabase
+call of a page request (API path only, never the query string; start offset
+and duration). The customer layout logs one `[perf] supabase` line after the
+response when the calls spanned 250 ms or more. This shows from production
+logs which calls make a page slow, for the next round's fixes.
+
+**Verified:** typecheck; eslint; unit tests 211 files, 1,891 passed (new
+`lib/db/requestTimings.test.ts`: no query strings, only slow requests
+logged); `next build`.

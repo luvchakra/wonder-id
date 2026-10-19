@@ -5,6 +5,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { actorAwareFetch } from "@/lib/security/actorHeader";
+import { timedFetch } from "./requestTimings";
 import {
   getSupabasePublishableKey,
   getSupabaseServiceRoleKey,
@@ -38,6 +39,7 @@ export const supabaseServer = cache(async () => {
 
 function cookieClient(cookieStore: Awaited<ReturnType<typeof cookies>>) {
   return createServerClient(getSupabaseUrl(), getSupabasePublishableKey(), {
+    global: { fetch: timedFetch(fetch) },
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -78,7 +80,7 @@ export function supabaseServiceRole(options: { actor?: boolean } = {}) {
     auth: { persistSession: false, autoRefreshToken: false },
     // `actor: false` only for the automation credential lookup itself,
     // which runs while the actor is still being resolved.
-    global: options.actor === false ? {} : { fetch: actorAwareFetch() },
+    global: { fetch: timedFetch(options.actor === false ? fetch : actorAwareFetch()) },
   });
 }
 
