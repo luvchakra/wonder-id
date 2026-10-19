@@ -3737,3 +3737,23 @@ project; no new advisor item. Typecheck and eslint clean.
 **Left out:** the E2E bootstrap describe stays skipped unless the run lists
 the IAM admin; when it is listed, that account now also needs a
 mail-confirmed address.
+
+## 2026-10-19 — Performance review (cross-module; detail in the QA audit log)
+
+The owner asked for the app to be faster. This module's part, with numbers,
+verification and what was left out, is in `docs/design/qa-agent-backlog-audit.md`
+(2026-10-19). The rules that came out of it are CLAUDE.md §15.1.
+
+## 2026-10-19 — Memberships in a fixed order (migration 0206)
+
+Found while root-causing the 19 Oct nightly (part 3): `my_memberships()` had
+no `ORDER BY`. Away from an organization's own address, with no organization
+chosen (`wa_tenant` cookie), the tenant context falls back to the first
+membership, so a person in two organizations could land in either one from
+one request to the next. It was never a leak (each is theirs), but it is wrong.
+The nightly hit it when `platform-admin.spec.ts` briefly gave the E2E
+administrator a Development environment, and an onboarding template looked
+missing (404). Now: oldest membership first, then tenant id. The rows,
+columns, security definer and execute grants are unchanged (checked after
+applying: the E2E administrator's first organization is E2E Tenant One;
+execute stays with authenticated and service_role only).

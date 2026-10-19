@@ -548,8 +548,11 @@ export async function sweepApprovalTimeouts(tenantId: string | null, now = new D
   const admin = supabaseServiceRole();
   let query = admin
     .from("access_request_approvals")
-    .select("id, tenant_id, request_id, stage, approver_kind, escalated_at, access_requests(request_policy_id, access_package_id, status, subject_identity_id)")
+    // Only steps of requests still waiting (filtered in the database): a
+    // cancelled or closed request's steps must never crowd out real timeouts.
+    .select("id, tenant_id, request_id, stage, approver_kind, escalated_at, access_requests!inner(request_policy_id, access_package_id, status, subject_identity_id)")
     .eq("status", "pending")
+    .eq("access_requests.status", "pending")
     .lt("due_at", now.toISOString())
     .order("due_at")
     .limit(200);
@@ -558,11 +561,15 @@ export async function sweepApprovalTimeouts(tenantId: string | null, now = new D
   if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
   let escalated = 0;
   let expired = 0;
+  // One read per policy, not per overdue step.
+  const termsByPolicy = new Map<string, ReturnType<typeof loadPolicyTerms>>();
   for (const s of data ?? []) {
     const stepTenant = s.tenant_id as string;
     const req = s.access_requests as unknown as { request_policy_id: string | null; access_package_id: string | null; status: string; subject_identity_id: string | null } | null;
     if (!req || req.status !== "pending") continue;
-    const terms = await loadPolicyTerms(stepTenant, req.request_policy_id, req.access_package_id);
+    const termsKey = `${stepTenant}:${req.request_policy_id ?? ""}:${req.access_package_id ?? ""}`;
+    if (!termsByPolicy.has(termsKey)) termsByPolicy.set(termsKey, loadPolicyTerms(stepTenant, req.request_policy_id, req.access_package_id));
+    const terms = await termsByPolicy.get(termsKey)!;
     const action = timeoutAction({ approverKind: s.approver_kind as ApproverKind, escalatedAt: (s.escalated_at as string | null) ?? null }, terms.onTimeout);
     if (action === "escalate") {
       const { data: done } = await admin

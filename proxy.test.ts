@@ -10,7 +10,8 @@ let lookupFails = false;
 const rpc = vi.fn(async (_fn: string, args: { p_subdomain: string | null }) =>
   lookupFails ? { data: null, error: { message: "db down" } } : { data: knownLabels.has(args.p_subdomain ?? "") ? [{ tenant_id: "t1", name: "Acme", slug: args.p_subdomain, status: "active" }] : [], error: null },
 );
-vi.mock("@supabase/ssr", () => ({ createServerClient: () => ({ auth: { getUser: async () => getUserResult, signOut: vi.fn() }, rpc }) }));
+// The proxy reads the session with getClaims() (performance review 2026-10-19): no session here, with the given error.
+vi.mock("@supabase/ssr", () => ({ createServerClient: () => ({ auth: { getClaims: async () => ({ data: null, error: getUserResult.error }), signOut: vi.fn() }, rpc }) }));
 vi.mock("@/lib/db/env", () => ({ getOptionalSupabaseUrl: () => "https://example.supabase.co", getOptionalSupabasePublishableKey: () => "pk" }));
 vi.mock("@/lib/tenant/getTenantContext", () => ({ TENANT_COOKIE_NAME: "wa_tenant" }));
 

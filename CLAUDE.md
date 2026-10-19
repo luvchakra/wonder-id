@@ -825,6 +825,64 @@ at a frozen or ambiguous screen.
   pages/queries against this section before marking a story `Done` — this is part of
   the Definition of Done (§12).
 
+### 15.1 Rules from the 2026-10-19 performance review (owner request)
+
+Measured on production, signed in: every page took 1.1–2.0 s to render. About
+450 ms of that was one auth round trip in the proxy. The rest was sequential
+queries, sweeps that wrote before the page rendered, and per-row lookups. These
+rules keep it from coming back. They apply to every new page, route, service and
+migration.
+
+1. **Count round trips, not queries.** Every Supabase call is a network round
+   trip. Independent reads go in one `Promise.all`, never on consecutive
+   `await` lines. A page needs at most three sequential waves after the tenant
+   context. A service that calls two others starts both before awaiting either.
+2. **Nothing slow in `proxy.ts`.**
+   - The proxy runs at Vercel's edge, near the visitor, not beside the
+     database.
+   - It verifies the session locally (`getClaims()`) and makes no
+     auth-server or database call that isn't cached.
+   - The revocation check (global sign-out is immediate) is in
+     `getSessionUser()`, in the route, beside Supabase. Keep it there.
+   - The functions run in `sin1`, beside Supabase `ap-southeast-1`. Never move
+     one without the other.
+3. **No writes on render.** Sweeps, expiries, recomputes and repairs belong to
+   the daily jobs (`/api/cron/*`). Where a page wants them fresher, run them
+   in `after()` once the response is sent. Keep one before rendering only
+   when a decision on that page depends on it (for example the access
+   request page, where someone approves), and say why in a comment.
+4. **No per-row queries.** Load a set with one `.in()` query, and look up each
+   distinct key once (e.g. per application, not per grant). Never `await`
+   inside a loop over rows, except for writes that must run in order.
+5. **Cache by scope.**
+   - Wrap anything two callers use in one request in React `cache()`.
+   - Cross-request caches are allowed only for data that is not a permission.
+     They are keyed by tenant (or user), time-bounded (one minute or less) and
+     size-bounded, like the proxy's host and session-policy caches (§14).
+   - The access context (memberships, roles, groups, policies) is never cached
+     across requests, so a revocation applies on the next one.
+6. **Read only what is shown.**
+   - Select the columns used; never `select("*")` of a wide table to count or
+     filter in JavaScript.
+   - Every list has a database limit, and every page counts with a head count.
+   - Anything on every page (the shell's badges) has a partial index matching
+     its filter.
+   - Use `count: "exact"` only where a paged list needs the total.
+7. **Index in the same migration.**
+   - A new filter or ordering gets its index in the migration that makes it
+     possible.
+   - Every foreign key has a covering index; the performance advisor shows
+     none unindexed.
+   - After a migration, check the advisors and `pg_stat_statements` for the
+     new queries.
+8. **Stream what can wait.** A slow panel that the page's first action does not
+   need (analytics, posture, history) renders inside `<Suspense>`, so the rest
+   of the page shows first.
+9. **Prove it with numbers.** Before and after a change that touches the shell,
+   the proxy or a busy page, run `node scripts/perf-pages.mjs` against
+   production or the E2E deployment. Record the median server time per page in
+   the module's audit log.
+
 ---
 
 ## 16. Secrets & Environment

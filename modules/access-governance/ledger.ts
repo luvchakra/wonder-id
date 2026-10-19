@@ -63,6 +63,8 @@ async function readPaged(build: (from: number, to: number) => PromiseLike<{ data
 
 async function loadRelationships(tenantId: string, scope: { identityId?: string }): Promise<LedgerRelationship[]> {
   const admin = supabaseServiceRole();
+  // ACCESS-P0-25: each application's baselines, for legacy and rogue. Independent of the accounts, so read alongside them.
+  const baselinesRead = readPaged((from, to) => admin.from("access_baselines").select("tenant_id, application_id, scope, taken_at").eq("tenant_id", tenantId).order("id").range(from, to), "access_baselines");
   const accounts = (
     await readPaged((from, to) => {
       let q = admin
@@ -90,10 +92,7 @@ async function loadRelationships(tenantId: string, scope: { identityId?: string 
     grants.push(...rows.filter(own(tenantId)));
   }
 
-  // ACCESS-P0-25: each application's baselines, for legacy and rogue.
-  const baselineRows = (
-    await readPaged((from, to) => admin.from("access_baselines").select("tenant_id, application_id, scope, taken_at").eq("tenant_id", tenantId).order("id").range(from, to), "access_baselines")
-  ).filter(own(tenantId));
+  const baselineRows = (await baselinesRead).filter(own(tenantId));
   const baseline = (applicationId: unknown, scope: "accounts" | "access") =>
     (baselineRows.find((b) => b.application_id === applicationId && b.scope === scope)?.taken_at as string | undefined) ?? null;
 
@@ -155,90 +154,101 @@ async function loadEvidence(tenantId: string, rels: LedgerRelationship[]): Promi
   const grantIds = rels.map((r) => r.accessGrantId).filter((x): x is string => x !== null);
 
   const requestCols = "id, tenant_id, subject_identity_id, agent_id, application_id, entitlement_id, decided_by, decided_at, justification, requested_expiry";
-  const requestRows: Row[] = [];
-  for (const [column, ids] of [["subject_identity_id", identityIds], ["agent_id", agentIds]] as const) {
-    for (const part of chunks(ids)) {
+  const loadRequests = async (): Promise<RequestEvidence[]> => {
+    const requestRows: Row[] = [];
+    for (const [column, ids] of [["subject_identity_id", identityIds], ["agent_id", agentIds]] as const) {
+      for (const part of chunks(ids)) {
+        const rows = await readPaged(
+          (from, to) =>
+            admin
+              .from("access_requests")
+              .select(requestCols)
+              .eq("tenant_id", tenantId)
+              // ACCESS-P0-32: an approved extension is evidence like the grant it extends.
+              .in("request_type", ["grant", "extend"])
+              .in("status", ["approved", "fulfilled"])
+              .not("application_id", "is", null)
+              .in(column, part)
+              .order("id")
+              .range(from, to),
+          "access_requests",
+        );
+        requestRows.push(...rows.filter(own(tenantId)));
+      }
+    }
+    return [...new Map(requestRows.map((r) => [r.id as string, r])).values()].map((r) => ({
+      id: r.id as string,
+      subjectIdentityId: (r.subject_identity_id as string | null) ?? null,
+      agentId: (r.agent_id as string | null) ?? null,
+      applicationId: r.application_id as string,
+      entitlementId: (r.entitlement_id as string | null) ?? null,
+      decidedBy: (r.decided_by as string | null) ?? null,
+      decidedAt: (r.decided_at as string | null) ?? null,
+      justification: (r.justification as string | null) ?? null,
+      requestedExpiry: (r.requested_expiry as string | null) ?? null,
+    }));
+  };
+
+  // A package's item counts once it was fulfilled; a later revocation keeps it as evidence of how the access came.
+  const loadPackages = async (): Promise<PackageEvidence[]> => {
+    const packages: PackageEvidence[] = [];
+    for (const part of chunks(identityIds)) {
       const rows = await readPaged(
         (from, to) =>
           admin
-            .from("access_requests")
-            .select(requestCols)
+            .from("access_package_assignment_items")
+            .select(
+              "tenant_id, application_id, entitlement_id, status, access_package_assignments!inner(id, tenant_id, identity_id, status, request_id, assigned_by, starts_at, expires_at, justification)",
+            )
             .eq("tenant_id", tenantId)
-            // ACCESS-P0-32: an approved extension is evidence like the grant it extends.
-            .in("request_type", ["grant", "extend"])
-            .in("status", ["approved", "fulfilled"])
-            .not("application_id", "is", null)
-            .in(column, part)
+            .in("status", ["fulfilled", "revoke_pending", "revoked"])
+            .in("access_package_assignments.identity_id", part)
             .order("id")
             .range(from, to),
-        "access_requests",
+        "access_package_assignment_items",
       );
-      requestRows.push(...rows.filter(own(tenantId)));
+      for (const r of rows.filter(own(tenantId))) {
+        const a = r.access_package_assignments as Row | null;
+        if (!a || a.tenant_id !== tenantId) continue;
+        packages.push({
+          assignmentId: a.id as string,
+          identityId: a.identity_id as string,
+          applicationId: r.application_id as string,
+          entitlementId: (r.entitlement_id as string | null) ?? null,
+          assignmentStatus: a.status as PackageEvidence["assignmentStatus"],
+          requestId: (a.request_id as string | null) ?? null,
+          assignedBy: (a.assigned_by as string | null) ?? null,
+          startsAt: a.starts_at as string,
+          expiresAt: (a.expires_at as string | null) ?? null,
+          justification: (a.justification as string | null) ?? null,
+        });
+      }
     }
-  }
-  const requests: RequestEvidence[] = [...new Map(requestRows.map((r) => [r.id as string, r])).values()].map((r) => ({
-    id: r.id as string,
-    subjectIdentityId: (r.subject_identity_id as string | null) ?? null,
-    agentId: (r.agent_id as string | null) ?? null,
-    applicationId: r.application_id as string,
-    entitlementId: (r.entitlement_id as string | null) ?? null,
-    decidedBy: (r.decided_by as string | null) ?? null,
-    decidedAt: (r.decided_at as string | null) ?? null,
-    justification: (r.justification as string | null) ?? null,
-    requestedExpiry: (r.requested_expiry as string | null) ?? null,
-  }));
-
-  // A package's item counts once it was fulfilled; a later revocation keeps it as evidence of how the access came.
-  const packages: PackageEvidence[] = [];
-  for (const part of chunks(identityIds)) {
-    const rows = await readPaged(
-      (from, to) =>
-        admin
-          .from("access_package_assignment_items")
-          .select(
-            "tenant_id, application_id, entitlement_id, status, access_package_assignments!inner(id, tenant_id, identity_id, status, request_id, assigned_by, starts_at, expires_at, justification)",
-          )
-          .eq("tenant_id", tenantId)
-          .in("status", ["fulfilled", "revoke_pending", "revoked"])
-          .in("access_package_assignments.identity_id", part)
-          .order("id")
-          .range(from, to),
-      "access_package_assignment_items",
-    );
-    for (const r of rows.filter(own(tenantId))) {
-      const a = r.access_package_assignments as Row | null;
-      if (!a || a.tenant_id !== tenantId) continue;
-      packages.push({
-        assignmentId: a.id as string,
-        identityId: a.identity_id as string,
-        applicationId: r.application_id as string,
-        entitlementId: (r.entitlement_id as string | null) ?? null,
-        assignmentStatus: a.status as PackageEvidence["assignmentStatus"],
-        requestId: (a.request_id as string | null) ?? null,
-        assignedBy: (a.assigned_by as string | null) ?? null,
-        startsAt: a.starts_at as string,
-        expiresAt: (a.expires_at as string | null) ?? null,
-        justification: (a.justification as string | null) ?? null,
-      });
-    }
-  }
+    return packages;
+  };
 
   // An administrator's grant: createManualAccessGrant's audit event names the grant and who made it.
-  const adminGrants = new Map<string, AdminGrantEvidence>();
-  for (const part of chunks(grantIds)) {
-    const { data, error } = await admin
-      .from("audit_logs")
-      .select("tenant_id, actor_id, object_id, created_at")
-      .eq("tenant_id", tenantId)
-      .eq("action", "access.grant_created")
-      .eq("outcome", "success")
-      .in("object_id", part)
-      .limit(part.length * 2);
-    if (error) throw new ApiError(500, "QUERY_FAILED", `audit_logs: ${error.message}`);
-    for (const r of ((data ?? []) as Row[]).filter(own(tenantId))) {
-      adminGrants.set(r.object_id as string, { grantId: r.object_id as string, actorId: (r.actor_id as string | null) ?? null, at: r.created_at as string });
+  const loadAdminGrants = async (): Promise<Map<string, AdminGrantEvidence>> => {
+    const adminGrants = new Map<string, AdminGrantEvidence>();
+    for (const part of chunks(grantIds)) {
+      const { data, error } = await admin
+        .from("audit_logs")
+        .select("tenant_id, actor_id, object_id, created_at")
+        .eq("tenant_id", tenantId)
+        .eq("action", "access.grant_created")
+        .eq("outcome", "success")
+        .in("object_id", part)
+        .limit(part.length * 2);
+      if (error) throw new ApiError(500, "QUERY_FAILED", `audit_logs: ${error.message}`);
+      for (const r of ((data ?? []) as Row[]).filter(own(tenantId))) {
+        adminGrants.set(r.object_id as string, { grantId: r.object_id as string, actorId: (r.actor_id as string | null) ?? null, at: r.created_at as string });
+      }
     }
-  }
+    return adminGrants;
+  };
+
+  // The three kinds of evidence are independent: read together (performance review 2026-10-19).
+  const [requests, packages, adminGrants] = await Promise.all([loadRequests(), loadPackages(), loadAdminGrants()]);
   return { requests, packages, adminGrants };
 }
 
@@ -298,20 +308,23 @@ export async function refreshAccessLedger(tenantId: string, scope: { identityId?
     if (!scope.identityId) await syncRogueAccessFindings(tenantId, []);
     return { recorded: 0, changed: 0 };
   }
-  const evidence = await loadEvidence(tenantId, rels);
+  const admin = supabaseServiceRole();
+  // What is stored and the evidence are independent: read together (performance review 2026-10-19).
+  const loadStored = async (): Promise<Map<string, Row>> => {
+    const stored = new Map<string, Row>();
+    for (const ids of chunks([...new Set(rels.map((r) => r.accountId))])) {
+      const rows = await readPaged(
+        (from, to) => admin.from("access_ledger").select("*").eq("tenant_id", tenantId).in("account_id", ids).order("id").range(from, to),
+        "access_ledger",
+      );
+      for (const r of rows.filter(own(tenantId))) stored.set(`${r.account_id}|${r.entitlement_id ?? ""}`, r);
+    }
+    return stored;
+  };
+  const [evidence, stored] = await Promise.all([loadEvidence(tenantId, rels), loadStored()]);
   const now = new Date();
   const nowIso = now.toISOString();
   const entries = rels.map((r) => ledgerEntry(r, evidence, now));
-
-  const admin = supabaseServiceRole();
-  const stored = new Map<string, Row>();
-  for (const ids of chunks([...new Set(entries.map((e) => e.accountId))])) {
-    const rows = await readPaged(
-      (from, to) => admin.from("access_ledger").select("*").eq("tenant_id", tenantId).in("account_id", ids).order("id").range(from, to),
-      "access_ledger",
-    );
-    for (const r of rows.filter(own(tenantId))) stored.set(`${r.account_id}|${r.entitlement_id ?? ""}`, r);
-  }
 
   const inserts: ReturnType<typeof toColumns>[] = [];
   const updates: { id: string; cols: ReturnType<typeof toColumns> }[] = [];
@@ -341,10 +354,15 @@ export async function refreshAccessLedger(tenantId: string, scope: { identityId?
     if (error) throw new ApiError(500, "WRITE_FAILED", `access_ledger: ${error.message}`);
     for (const r of (data ?? []) as Row[]) ids.set(`${r.account_id}|${r.entitlement_id ?? ""}`, r.id as string);
   }
-  for (const u of updates) {
-    const { error } = await admin.from("access_ledger").update(u.cols).eq("tenant_id", tenantId).eq("id", u.id);
-    if (error) throw new ApiError(500, "WRITE_FAILED", `access_ledger: ${error.message}`);
-    ids.set(`${u.cols.account_id}|${u.cols.entitlement_id ?? ""}`, u.id);
+  // Each changed row is its own update; ten at a time rather than one after another.
+  for (const batch of chunks(updates, 10)) {
+    await Promise.all(
+      batch.map(async (u) => {
+        const { error } = await admin.from("access_ledger").update(u.cols).eq("tenant_id", tenantId).eq("id", u.id);
+        if (error) throw new ApiError(500, "WRITE_FAILED", `access_ledger: ${error.message}`);
+        ids.set(`${u.cols.account_id}|${u.cols.entitlement_id ?? ""}`, u.id);
+      }),
+    );
   }
 
   const eventRows = events.flatMap(({ key, entry, before }) =>

@@ -1625,3 +1625,9 @@ and what it includes is reviewed with the included role
 reads "access packages and business roles". No compliance code changed
 beyond the labels; tests: `modules/certification-compliance` passes with
 the Access changes (part of the 464 above).
+
+## 2026-10-19 — Performance review (cross-module; detail in the QA audit log)
+
+The owner asked for the app to be faster. This module's part, with numbers,
+verification and what was left out, is in `docs/design/qa-agent-backlog-audit.md`
+(2026-10-19). The rules that came out of it are CLAUDE.md §15.1.

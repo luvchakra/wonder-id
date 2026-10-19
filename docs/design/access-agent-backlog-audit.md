@@ -4741,3 +4741,9 @@ The request page names the group and "any one approves". API
 **Left out:** conditions other than risk (department, application
 attribute) and per-level timeouts; the policy's own timeout still applies to
 each step. Recorded as possible follow-ups, not built.
+
+## 2026-10-19 — Performance review (cross-module; detail in the QA audit log)
+
+The owner asked for the app to be faster. This module's part, with numbers,
+verification and what was left out, is in `docs/design/qa-agent-backlog-audit.md`
+(2026-10-19). The rules that came out of it are CLAUDE.md §15.1.

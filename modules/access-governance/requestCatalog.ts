@@ -579,6 +579,15 @@ export async function cancelAccessRequest(tenantId: string, actorUserId: string,
     .maybeSingle();
   if (error) throw new ApiError(500, "UPDATE_FAILED", error.message);
   if (!data) throw new ApiError(409, "CONFLICT", "Only a request that is still waiting can be cancelled");
+  // Its open approval steps are no longer anyone's to decide (performance review 2026-10-19: left open,
+  // the timeout sweep re-read them on every view of the requests pages).
+  const { error: stepError } = await supabaseServiceRole()
+    .from("access_request_approvals")
+    .update({ status: "skipped" })
+    .eq("tenant_id", tenantId)
+    .eq("request_id", requestId)
+    .in("status", ["pending", "waiting"]);
+  if (stepError) console.error("cancelAccessRequest: could not close approval steps", { requestId, code: stepError.code });
   await writeAudit({ tenantId, actorId: actorUserId, actorType: "user", action: "access.request_cancelled", objectType: "access_request", objectId: requestId, outcome: "success", metadata: { subjectIdentityId: existing.subject_identity_id } });
   return toAccessRequest(data);
 }

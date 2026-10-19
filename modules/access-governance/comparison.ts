@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { getAgentContract } from "@/modules/agent-identity/service";
 import { ApiError } from "@/lib/shared/types/foundation";
 import type { ContractComparisonClassification, ContractComparisonRow } from "@/lib/shared/types/access-governance";
@@ -79,7 +81,7 @@ export function classifyAccessGrant(
  * consumes this function's output the same way it already consumes
  * evaluatePolicies().
  */
-export async function compareAccessToContract(
+export const compareAccessToContract = cache(async function compareAccessToContract(
   tenantId: string,
   agentId: string,
 ): Promise<ContractComparisonRow[]> {
@@ -91,14 +93,17 @@ export async function compareAccessToContract(
   const rows: ContractComparisonRow[] = [];
   const seenApprovedApps = new Set<string>();
 
+  // The path is per application: each one is explained once, all at the same
+  // time, rather than twice per grant one after another (performance review 2026-10-19).
+  const applications = [...new Set(effectiveAccess.map((g) => g.application).filter((a): a is string => Boolean(a)))];
+  const paths = new Map(await Promise.all(applications.map(async (a) => [a, await explainAccessPath(tenantId, agentId, a).catch(() => null)] as const)));
+
   for (const grant of effectiveAccess) {
     const application = grant.application ?? null;
     const classification = classifyAccessGrant(contract, grant);
     if (classification === "approved" && application) seenApprovedApps.add(application.toLowerCase());
 
-    const path = application
-      ? await explainAccessPath(tenantId, agentId, application).catch(() => null)
-      : null;
+    const path = application ? (paths.get(application) ?? null) : null;
 
     rows.push({
       classification,
@@ -130,4 +135,4 @@ export async function compareAccessToContract(
   }
 
   return rows;
-}
+});
