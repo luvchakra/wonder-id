@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { supabaseServer } from "@/lib/db/supabaseServer";
-import { getSessionUser } from "@/lib/tenant/session";
+import { getSessionClaims, getSessionUser } from "@/lib/tenant/session";
 import { getHostTenant } from "@/lib/tenant/hostTenant";
 import { mfaStepUpNeeded } from "@/lib/tenant/mfaRequired";
 import type { TenantContext } from "@/lib/shared/types/foundation";
@@ -57,7 +57,8 @@ const TERMS_SELECT = "scope_type, scope_values, starts_at, expires_at, requires_
  * person is asked for MFA rather than treated as having no organization.
  */
 const readMyMemberships = cache(async (): Promise<{ rows: Membership[]; failed: boolean }> => {
-  const user = await getSessionUser();
+  // The token's user id only: getTenantContext() and getMyMemberships() wait for getSessionUser() too.
+  const user = (await getSessionClaims())?.user;
   if (!user) return { rows: [], failed: false };
   const supabase = await supabaseServer();
   const { data, error } = await supabase.rpc("my_memberships");
@@ -74,7 +75,10 @@ const readMyMemberships = cache(async (): Promise<{ rows: Membership[]; failed: 
   };
 });
 
-export const getMyMemberships = cache(async (): Promise<Membership[]> => (await readMyMemberships()).rows);
+export const getMyMemberships = cache(async (): Promise<Membership[]> => {
+  const [user, read] = await Promise.all([getSessionUser(), readMyMemberships()]);
+  return user ? read.rows : [];
+});
 
 /**
  * The current user's role rows across every tenant they belong to, once
@@ -90,7 +94,7 @@ export const getMyMemberships = cache(async (): Promise<Membership[]> => (await 
  * escalation, not just a cosmetic over-fetch.
  */
 const getMyRoleRows = cache(async (): Promise<RoleRow[] | null> => {
-  const user = await getSessionUser();
+  const user = (await getSessionClaims())?.user;
   if (!user) return [];
   const supabase = await supabaseServer();
   const { data, error } = await supabase
@@ -114,7 +118,7 @@ type GroupRoleRow = {
  * tenants where the user is an active member.
  */
 const getMyGroupRoleRows = cache(async (): Promise<GroupRoleRow[] | null> => {
-  const user = await getSessionUser();
+  const user = (await getSessionClaims())?.user;
   if (!user) return [];
   const supabase = await supabaseServer();
   const { data, error } = await supabase
@@ -142,7 +146,7 @@ type PolicyRow = {
  * read, the context fails closed: see getTenantContext().
  */
 const getMyPolicyRows = cache(async (): Promise<PolicyRow[] | null> => {
-  const user = await getSessionUser();
+  const user = (await getSessionClaims())?.user;
   if (!user) return [];
   const supabase = await supabaseServer();
   const { data, error } = await supabase
@@ -188,12 +192,14 @@ function grantOf(terms: Terms, role: NonNullable<RoleOf>, source: Grant["source"
  * be.
  */
 export const getTenantContext = cache(async (): Promise<TenantContext> => {
-  const user = await getSessionUser();
-  if (!user) {
-    return { userId: "", tenantId: null, tenantSlug: null, roles: [], permissions: [] };
-  }
+  const signedOut: TenantContext = { userId: "", tenantId: null, tenantSlug: null, roles: [], permissions: [] };
+  if (!(await getSessionClaims())) return signedOut;
 
-  const [membershipRead, directRoleRows, groupRoleRows, policyRows, cookieStore, host] = await Promise.all([
+  // Performance review (2026-10-19): the auth server's check that the session
+  // still exists (getSessionUser) runs alongside the reads, which need only
+  // the token's user id. Nothing is used unless the session is live.
+  const [user, membershipRead, directRoleRows, groupRoleRows, policyRows, cookieStore, host] = await Promise.all([
+    getSessionUser(),
     readMyMemberships(),
     getMyRoleRows(),
     getMyGroupRoleRows(),
@@ -201,6 +207,7 @@ export const getTenantContext = cache(async (): Promise<TenantContext> => {
     cookies(),
     getHostTenant(),
   ]);
+  if (!user) return signedOut;
   const memberships = membershipRead.rows;
   // A failed read is never "no access" (owner decision, 2026-10-17): still
   // nothing is permitted, but the context says it could not be checked.

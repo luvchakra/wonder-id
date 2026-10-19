@@ -3757,3 +3757,11 @@ missing (404). Now: oldest membership first, then tenant id. The rows,
 columns, security definer and execute grants are unchanged (checked after
 applying: the E2E administrator's first organization is E2E Tenant One;
 execute stays with authenticated and service_role only).
+
+## 2026-10-19 — Performance round 2: the live-session check runs alongside the context reads
+
+`getSessionClaims()` (local token verification only) feeds the tenant
+context's reads, and `getSessionUser()` (with the auth server's live check)
+runs alongside them; `getTenantContext()` returns nothing unless the session
+is live. The proxy sends a `Server-Timing` header. Detail and verification in
+the QA audit log (2026-10-19, round 2).

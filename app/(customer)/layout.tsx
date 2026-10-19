@@ -57,10 +57,14 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function CustomerLayout({ children }: { children: React.ReactNode }) {
-  const user = await getSessionUser();
+  // Performance review (2026-10-19): the reads that need only the person
+  // start now, alongside the tenant context, instead of after it.
+  // Each falls back to its "not shown" value, so an early failure is never unhandled.
+  const profileRead = getProfile().catch(() => null);
+  const adminRead = platformConsoleAccess().then((access) => access !== null, () => false);
+  const environmentsRead = getMyTenantEnvironments().catch(() => new Map<string, { environment: string; parentTenantId: string | null }>());
+  const [user, ctx] = await Promise.all([getSessionUser(), getTenantContext()]);
   if (!user) redirect("/sign-in");
-
-  const ctx = await getTenantContext();
   // FOUNDATION-P0-27 — the organization requires MFA and this session has not passed it.
   if (ctx.mfaStepUp) redirect("/verify-mfa");
   // Owner decision 2026-10-17: a failed access read is said as such, never
@@ -74,11 +78,11 @@ export default async function CustomerLayout({ children }: { children: React.Rea
   }
 
   const [profile, memberships, isAdmin, announcements, openFindings, cookieStore, openAccessFindings, environments] = await Promise.all([
-    getProfile(),
+    profileRead,
     // Already resolved by getTenantContext() above — the cache hands back
     // the same promise, so this costs nothing.
     getMyMemberships(),
-    platformConsoleAccess().then((access) => access !== null),
+    adminRead,
     // PLATFORM-P0-05.4 — Experience Agent's half of Platform's already-
     // published getActiveAnnouncements(): every customer page sees any
     // active global/tenant-scoped maintenance/notice banner.
@@ -98,7 +102,7 @@ export default async function CustomerLayout({ children }: { children: React.Rea
     // ACCESS-P0-25: rogue access is listed in Risk Overview too, so the badge counts it (one count query).
     countOpenAccessFindings(ctx.tenantId),
     // Owner request 2026-10-13: each organization's environment, for its colour.
-    getMyTenantEnvironments(),
+    environmentsRead,
   ]);
 
   // FOUNDATION-P0-22 — each organization's own address, so the rail always shows where you are.

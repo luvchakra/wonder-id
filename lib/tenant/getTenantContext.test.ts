@@ -8,7 +8,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
-vi.mock("@/lib/tenant/session", () => ({ getSessionUser: async () => ({ id: "u1", aal: "aal1" }) }));
+// The token's claims (local) and the auth server's live check (2026-10-19: run alongside the reads).
+let liveSession = true;
+vi.mock("@/lib/tenant/session", () => ({
+  getSessionClaims: async () => ({ user: { id: "u1", aal: "aal1" }, automation: false }),
+  getSessionUser: async () => (liveSession ? { id: "u1", aal: "aal1" } : null),
+}));
 vi.mock("@/lib/tenant/hostTenant", () => ({ getHostTenant: async () => ({ target: { kind: "main" }, tenant: null }) }));
 let automationAccess: unknown = null;
 vi.mock("@/lib/security/automationCredentials", () => ({ getAutomationAccess: async () => automationAccess }));
@@ -33,6 +38,7 @@ beforeEach(() => {
   vi.resetModules();
   vi.spyOn(console, "error").mockImplementation(() => {});
   automationAccess = null;
+  liveSession = true;
   results = {
     my_memberships: ok([{ tenant_id: "t1", name: "Acme", slug: "acme", account_type: "internal", mfa_required: false }]),
     user_roles: ok([{ tenant_id: "t1", ...terms, roles: role }]),
@@ -51,6 +57,12 @@ describe("getTenantContext when a read fails", () => {
     const ctx = await resolve();
     expect(ctx).toMatchObject({ tenantId: "t1", permissions: ["agent.read"] });
     expect(ctx.unavailable).toBeUndefined();
+  });
+
+  it("a revoked session gets nothing, though its reads ran alongside the check", async () => {
+    liveSession = false;
+    const ctx = await resolve();
+    expect(ctx).toMatchObject({ userId: "", tenantId: null, permissions: [] });
   });
 
   for (const table of ["my_memberships", "user_roles", "group_members", "authorization_policies"]) {
