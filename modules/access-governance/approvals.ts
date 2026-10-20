@@ -636,6 +636,43 @@ export async function getRequestWithApprovals(tenantId: string, requestId: strin
   };
 }
 
+export type PendingApprover = { kind: ApproverKind; name: string | null; groupName: string | null };
+
+/** Who each waiting request is waiting on now: its open steps, with names, in one read of the steps (owner feedback, 20 Oct). */
+export async function pendingApproversFor(tenantId: string, requestIds: string[]): Promise<Map<string, PendingApprover[]>> {
+  const ids = [...new Set(requestIds)].filter((id) => UUID_RE.test(id));
+  const out = new Map<string, PendingApprover[]>();
+  if (!ids.length) return out;
+  const supabase = await supabaseServer();
+  const { data, error } = await supabase
+    .from("access_request_approvals")
+    .select("request_id, stage, approver_kind, approver_identity_id, approver_group_id, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("status", "pending")
+    .in("request_id", ids)
+    .limit(500);
+  if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  const rows = data ?? [];
+  const identityIds = [...new Set(rows.map((r) => r.approver_identity_id as string | null).filter((x): x is string => Boolean(x)))];
+  const groupIds = [...new Set(rows.map((r) => r.approver_group_id as string | null).filter((x): x is string => Boolean(x)))];
+  const [names, groups] = await Promise.all([
+    getIdentityNames(tenantId, identityIds),
+    groupIds.length ? supabase.from("groups").select("id, name").eq("tenant_id", tenantId).in("id", groupIds) : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+  ]);
+  const groupName = new Map((groups.data ?? []).map((g) => [g.id as string, g.name as string]));
+  const ordered = [...rows].sort((a, b) => (a.stage as number) - (b.stage as number) || KIND_ORDER.indexOf(a.approver_kind as ApproverKind) - KIND_ORDER.indexOf(b.approver_kind as ApproverKind));
+  for (const r of ordered) {
+    const list = out.get(r.request_id as string) ?? [];
+    list.push({
+      kind: r.approver_kind as ApproverKind,
+      name: r.approver_identity_id ? (names.get(r.approver_identity_id as string)?.displayName ?? null) : null,
+      groupName: r.approver_group_id ? (groupName.get(r.approver_group_id as string) ?? null) : null,
+    });
+    out.set(r.request_id as string, list);
+  }
+  return out;
+}
+
 /** Ids of waiting requests this person may decide now (named, or as an access manager), not their own. */
 export async function listRequestIdsAwaiting(tenantId: string, actor: { userId: string; canApproveAsAccessManager: boolean }): Promise<string[]> {
   const supabase = await supabaseServer();

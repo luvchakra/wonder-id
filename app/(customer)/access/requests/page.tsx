@@ -7,6 +7,7 @@ import {
   activeGroupIdsOf,
   listRequestIdsAwaiting,
   listRequests,
+  pendingApproversFor,
   repairApprovalChains,
   requestProgressFor,
   sweepApprovalTimeouts,
@@ -18,7 +19,7 @@ import { Badge, type BadgeTone, Card, EmptyState, LinkButton, TableContainer, Td
 import { objectActionsFor } from "@/modules/operations/exportRegistry";
 import { cn } from "@/lib/utils";
 import { RequestActions } from "./RequestActions";
-import { lineState } from "./labels";
+import { lineState, waitingOn } from "./labels";
 import { TaskActions } from "../fulfilment/TaskActions";
 import { TASK_STATUS, accountLabel, taskLabel } from "../fulfilment/labels";
 
@@ -87,7 +88,11 @@ export default async function AccessRequestsPage({ searchParams }: { searchParam
     pageSize: PAGE_SIZE,
   });
   const awaitingMe = new Set(awaiting);
-  const progress = await requestProgressFor(ctx.tenantId!, rows.filter((r) => r.status === "approved" || r.status === "fulfilled").map((r) => r.id));
+  // Owner feedback (20 Oct): a waiting line says whom it waits on. Read alongside the progress, not after it.
+  const [progress, approvers] = await Promise.all([
+    requestProgressFor(ctx.tenantId!, rows.filter((r) => r.status === "approved" || r.status === "fulfilled").map((r) => r.id)),
+    pendingApproversFor(ctx.tenantId!, rows.filter((r) => r.status === "pending" && r.subjectIdentityId).map((r) => r.id)),
+  ]);
   const tasks = view === "waiting" ? myTasks : [];
   const waitingCount = awaiting.length + myTasks.length;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -189,11 +194,11 @@ export default async function AccessRequestsPage({ searchParams }: { searchParam
             <TableContainer label="Access requests" bare>
               <Thead>
                 <tr>
+                  <Th>Request</Th>
                   <Th>Access</Th>
                   <Th>For</Th>
                   <Th>Status</Th>
                   <Th hideBelow="lg">Risk</Th>
-                  <Th hideBelow="xl">Requested</Th>
                   <Th>Actions</Th>
                 </tr>
               </Thead>
@@ -201,16 +206,21 @@ export default async function AccessRequestsPage({ searchParams }: { searchParam
                 {rows.map((r) => {
                   const mine = r.requestedBy === ctx.userId;
                   const state = lineState(r, progress.get(r.id)?.progress, undefined, progress.get(r.id)?.removal);
+                  const requestHref = `/access/requests/${r.ref ?? r.id}`;
+                  const waiting = r.status === "pending" ? waitingOn(approvers.get(r.id)) : null;
                   return (
                     <Tr key={r.id}>
                       <Td>
-                        <Link href={`/access/requests/${r.ref ?? r.id}`} className="font-medium text-foreground hover:underline">
+                        <Link href={requestHref} className="whitespace-nowrap font-mono text-sm font-medium text-primary hover:underline">
+                          {r.requestNumber ?? "Open request"}
+                        </Link>
+                        <span className="block whitespace-nowrap text-xs text-muted-foreground">{when(r.createdAt)}</span>
+                      </Td>
+                      <Td>
+                        <Link href={requestHref} className="font-medium text-foreground hover:underline">
                           {r.packageName ?? r.applicationName ?? "Application"}
                         </Link>
-                        <span className="block text-xs text-muted-foreground">
-                          {r.requestNumber ? <span className="font-mono">{r.requestNumber} · </span> : null}
-                          {r.accessPackageId ? "Access package" : (r.entitlementName ?? "Application access")}
-                        </span>
+                        <span className="block text-xs text-muted-foreground">{r.accessPackageId ? "Access package" : (r.entitlementName ?? "Application access")}</span>
                       </Td>
                       <Td>
                         {r.subjectIdentityId ? (
@@ -230,14 +240,11 @@ export default async function AccessRequestsPage({ searchParams }: { searchParam
                         <Badge tone={state.tone} className="whitespace-nowrap">
                           {state.label}
                         </Badge>
+                        {waiting ? <span className="mt-0.5 block max-w-[16rem] text-xs text-foreground">{waiting}</span> : null}
                         {r.status === "pending" && r.approvalStage ? <span className="mt-0.5 block text-xs text-muted-foreground">Stage {r.approvalStage}</span> : null}
                         {r.requestedExpiry && ["pending", "approved", "fulfilled"].includes(r.status) ? <span className="mt-0.5 block text-xs text-muted-foreground">Until {when(r.requestedExpiry)}</span> : null}
                       </Td>
                       <Td hideBelow="lg">{r.riskLevel ? <Badge tone={RISK_TONE[r.riskLevel]} className="whitespace-nowrap">{r.riskLevel}</Badge> : <span className="text-muted-foreground">—</span>}</Td>
-                      <Td hideBelow="xl">
-                        {when(r.createdAt)}
-                        {r.justification ? <span className="block max-w-[18rem] truncate text-xs text-muted-foreground">{r.justification}</span> : null}
-                      </Td>
                       <Td>
                         <RequestActions
                           requestId={r.id}

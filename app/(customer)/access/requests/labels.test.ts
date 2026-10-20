@@ -1,5 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { lineState } from "./labels";
+import { lineState, waitingOn } from "./labels";
+
+describe("waitingOn (owner feedback, 20 Oct)", () => {
+  const a = (kind: string, name: string | null = null, groupName: string | null = null) => ({ kind, name, groupName });
+  it("names the person a step waits on, else the role", () => {
+    expect(waitingOn([a("manager", "Ada Lovelace")])).toBe("Waiting on Ada Lovelace");
+    expect(waitingOn([a("manager")])).toBe("Waiting on their manager");
+    expect(waitingOn([a("access_managers", "ignored")])).toBe("Waiting on an access manager");
+    expect(waitingOn([a("group", null, "Finance approvers")])).toBe("Waiting on any member of Finance approvers");
+  });
+  it("lists parallel approvers once each, and folds a long list", () => {
+    expect(waitingOn([a("manager", "Ada"), a("application_owner", "Bob")])).toBe("Waiting on Ada and Bob");
+    expect(waitingOn([a("manager", "Ada"), a("application_owner", "Ada")])).toBe("Waiting on Ada");
+    expect(waitingOn([a("manager", "A"), a("application_owner", "B"), a("named_approver", "C"), a("entitlement_owner", "D")])).toBe("Waiting on A, B and 2 more");
+  });
+  it("says nothing when no step is open", () => {
+    expect(waitingOn(undefined)).toBeNull();
+    expect(waitingOn([])).toBeNull();
+  });
+});
 
 const NOW = new Date("2026-10-11T12:00:00Z");
 const req = (over: Partial<{ status: string; requestType: string; requestedExpiry: string | null }> = {}) => ({ status: "approved", requestType: "grant", requestedExpiry: null, ...over });

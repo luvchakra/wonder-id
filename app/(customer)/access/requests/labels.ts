@@ -56,6 +56,30 @@ export const ENDED: Record<string, Label> = {
   never_fulfilled: { label: "Ended · never fulfilled", tone: "neutral" },
 };
 
+const APPROVER: Record<string, string> = {
+  manager: "their manager",
+  managers_manager: "their manager's manager",
+  entitlement_owner: "the entitlement owner",
+  application_owner: "the application owner",
+  package_owner: "the package owner",
+  named_approver: "a named approver",
+  access_managers: "an access manager",
+};
+
+/** Who a waiting request is waiting on, from its open steps: a person by name, else the role; a group's members; any access manager. */
+export function waitingOn(approvers: { kind: string; name: string | null; groupName: string | null }[] | undefined): string | null {
+  if (!approvers?.length) return null;
+  const who = [
+    ...new Set(
+      approvers.map((a) =>
+        a.kind === "access_managers" ? APPROVER.access_managers : a.kind === "group" ? `any member of ${a.groupName ?? "a group"}` : (a.name ?? APPROVER[a.kind] ?? "an approver"),
+      ),
+    ),
+  ];
+  const shown = who.length > 3 ? [...who.slice(0, 2), `${who.length - 2} more`] : who;
+  return `Waiting on ${shown.length > 1 ? `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}` : shown[0]}`;
+}
+
 /** One line's state: its status, or once approved its real progress; time-bound access past its end date has ended, and shows whether it is gone. */
 export function lineState(
   r: { status: string; requestType: string; requestedExpiry: string | null },
