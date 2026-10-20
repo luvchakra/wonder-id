@@ -319,7 +319,7 @@ An AI assistant can **propose** an onboarding configuration; a person always rev
   - how long access may last;
   - whether a reason is required.
 - Nobody can approve a request they made, or one that is for them.
-- **Approval workflows:** an approval pattern defined once and used by the policies of as many applications as follow it (Access → Approval Workflows → Actions → New workflow…).
+- **Approval workflows:** an approval pattern defined once and used by the policies of as many applications as follow it (Administration → Integrations → Approval Workflows → Actions → New workflow…).
   - A workflow has up to six levels, run in order. Each level names up to five approvers: the manager, the manager's manager, the owner of what is requested, the application owner, a named person, a group (any one member approves) or access managers.
   - A level is decided by all its approvers, or by any one of them; once one approves, the others are no longer asked.
   - A level can apply only from a risk upwards, for example a security review for high and critical risk.
@@ -696,6 +696,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 20 Oct 2026 | Approval Workflows moved from the Access menu to Administration › Integrations, since setting them up is an administrator's job. |
 | 20 Oct 2026 | Organization Settings has a new Email (SMTP) page: the organization's notifications and invitations can be sent through its own mail server, with a test e-mail to check the settings. |
 | 20 Oct 2026 | My requests also lists the requests someone raised for you, marked "For you". The header shows your name in the organization when your account has no display name, instead of your email. |
 | 20 Oct 2026 | The requests list starts each line with its request number (a link to the request) and date, and a waiting request says whom it is waiting on. |

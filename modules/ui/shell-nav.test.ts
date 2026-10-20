@@ -17,7 +17,7 @@ describe("the area list (owner decision, 2026-10-13, the owner's navigation shee
   });
 
   it("keeps Request Access first under Access, and Self Service for what anyone can start", () => {
-    expect(sectionPages(SHELL_NAV[2]).map((p) => p.label)).toEqual(["Request Access", "All Requests", "Provisioning Tasks", "Access Packages", "Entitlements", "Request Policies", "Approval Workflows"]);
+    expect(sectionPages(SHELL_NAV[2]).map((p) => p.label)).toEqual(["Request Access", "All Requests", "Provisioning Tasks", "Access Packages", "Entitlements", "Request Policies"]);
     expect(sectionPages(SHELL_NAV[6]).map((p) => p.label)).toEqual(["Onboard Application", "Register Agent"]);
   });
 

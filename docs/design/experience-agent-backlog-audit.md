@@ -4403,3 +4403,15 @@ parallel wave, so no extra round trip in sequence), then to the email.
 
 **Verified:** typecheck, eslint on `app/(customer)/layout.tsx`; E2E in the
 nightly run.
+
+## 2026-10-20 — Approval Workflows moved to Administration › Integrations (owner test feedback item 15)
+
+Owner request: "The Approval Workflow should move from current menu to
+Admin>Integrations menu. This is an admin activity." `shell-nav.ts`: the
+Approval Workflows page (`/access/approval-workflows`, still gated by
+`access.manage`) left the Access area and is the last page of
+Administration › Integrations, so opening it shows the Admin menu. The page
+and its address are unchanged. Help guide (navigation and access-request
+articles) and knowledge base updated. Verified: `npx vitest run modules/ui`
+(16 files, 126 tests passed) and eslint on the changed files; typecheck clean apart from the known
+missing-asset image errors of `app/welcome`.
