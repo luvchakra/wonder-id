@@ -190,7 +190,7 @@ All information from your systems reaches WonderID through **connections**. Ther
 | HR | Frappe HR |
 | Directories and identity providers | Active Directory (people, accounts, managed service accounts, groups; can also add and remove group members), LDAP directory (which can also add and remove group members), Keycloak, Saviynt, and any identity provider or HR system that pushes people over SCIM 2.0 |
 | Applications | ERPNext, Gitea, Mattermost, Nextcloud, Zendesk, and any application with a SCIM 2.0 service (which can also add and remove group members, disable and create users) |
-| Infrastructure and data | PostgreSQL, Kubernetes, OpenBao (secrets), Windows servers over PowerShell (local accounts and groups; can also disable accounts and add and remove group members) |
+| Infrastructure and data | PostgreSQL, Microsoft SQL Server, Oracle Database, MySQL, any of these (or MariaDB) read with your own SELECT statements, Kubernetes, OpenBao (secrets), Windows servers over PowerShell (local accounts and groups; can also disable accounts and add and remove group members) |
 | AI | MCP server, Runtime Gateway |
 | Anything else | Generic REST API (any REST/JSON API, set up in the connection's own settings), Webhook (signed events from any system), CSV files |
 
@@ -706,6 +706,7 @@ Newest first.
 | 20 Oct 2026 | New built-in connection type, Generic REST API: connect any REST/JSON API by describing its sign-in, requests, paging, field mappings and changes in the connection's own settings, with no connection type to write. |
 | 20 Oct 2026 | Active Directory is a built-in connection type: people with their managers, accounts (disabled, privileged, expiring, last sign-in), managed service accounts, security and distribution groups and memberships; it can add and remove group members once changes are turned on. |
 | 20 Oct 2026 | New connection type: Windows server (PowerShell) reads a server's local accounts, local groups and their members over WinRM, and can disable an account and add or remove group members once changes are turned on. Integrators can write their own PowerShell connection types, with scripts that take any parameters. |
+| 20 Oct 2026 | Databases: new connection types for Microsoft SQL Server, Oracle Database and MySQL read logins, roles and role holders; Database (your own queries) reads people, accounts, entitlements and access from any of them, PostgreSQL or MariaDB with your own SELECT statements. Every query runs read-only over verified encryption. |
 | 20 Oct 2026 | An application's page has two new tabs: Policies (the request policies that apply to it and who approves under each, with a link to change them) and Audit History (the latest changes to the application, its entitlements and entitlement types). |
 | 20 Oct 2026 | The Email (SMTP) page has a Provider list (GoDaddy, Gmail, Microsoft 365, Outlook.com, SendGrid, Mailgun, Zoho Mail and others) that fills in the server, security and port. |
 | 20 Oct 2026 | Request Policies is simpler: choosing a scope opens its policy straight away, and the form has three parts (who can request, approval, how long access lasts). One "Approved by" choice lists your approval workflows and the built-in routes, replacing three separate fields. Each policy's name opens its form. |

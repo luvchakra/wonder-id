@@ -77,7 +77,7 @@ export const ORIGIN_LABEL: Record<TypeOrigin, string> = {
 const PROTOCOL_LABEL: Record<ConnectorDriver, string> = {
   http: "HTTP REST",
   ldap: "LDAP v3 (LDAPS)",
-  sql: "SQL (PostgreSQL, TLS)",
+  sql: "SQL (PostgreSQL, SQL Server, Oracle, MySQL; TLS)",
   mcp: "MCP (Streamable HTTP)",
   file: "CSV files (HTTPS or received)",
   powershell: "PowerShell over WinRM (HTTPS)",

@@ -98,6 +98,111 @@ vi.mock("pg", () => {
   return { Client, default: { Client } };
 });
 
+/**
+ * One fake for the other databases (tedious, oracledb, mysql2): each
+ * connection records its config and statements; a statement that is not
+ * the driver's own transaction or limit control returns `sqlDb.rows`.
+ */
+type SqlDbState = { dialect: string; config: Record<string, unknown>; queries: string[]; ended: boolean };
+const sqlDb = vi.hoisted(() => ({
+  clients: [] as SqlDbState[],
+  rows: [] as Record<string, unknown>[],
+  connectError: null as Error | null,
+  failOn: null as RegExp | null,
+}));
+const sqlDbRun = vi.hoisted(() => (state: { queries: string[] }, sql: string) => {
+  state.queries.push(sql);
+  if (/^(SET ROWCOUNT|IF @@TRANCOUNT|SET TRANSACTION READ ONLY|START TRANSACTION READ ONLY|ROLLBACK)/.test(sql)) return [];
+  if (sqlDb.failOn?.test(sql)) throw Object.assign(new Error("Timeout: Request failed to complete in 30000ms"), { code: "ETIMEOUT" });
+  return sqlDb.rows;
+});
+
+vi.mock("tedious", () => {
+  class Connection {
+    private readonly state: SqlDbState;
+    private onEnd: () => void = () => undefined;
+    constructor(config: Record<string, unknown>) {
+      this.state = { dialect: "sqlserver", config, queries: [], ended: false };
+      sqlDb.clients.push(this.state);
+    }
+    on(event: string, fn: () => void) {
+      if (event === "end") this.onEnd = fn;
+    }
+    connect(cb: (err?: Error) => void) {
+      cb(sqlDb.connectError ?? undefined);
+    }
+    execSqlBatch(request: Request) {
+      try {
+        for (const row of sqlDbRun(this.state, request.sql)) request.row(Object.entries(row).map(([colName, value]) => ({ metadata: { colName }, value })));
+        request.done();
+      } catch (err) {
+        request.done(err as Error);
+      }
+    }
+    close() {
+      this.state.ended = true;
+      this.onEnd();
+    }
+  }
+  class Request {
+    row: (columns: unknown[]) => void = () => undefined;
+    constructor(
+      readonly sql: string,
+      readonly done: (err?: Error) => void,
+    ) {}
+    on(_event: "row", fn: (columns: unknown[]) => void) {
+      this.row = fn;
+    }
+  }
+  return { Connection, Request };
+});
+
+vi.mock("oracledb", () => {
+  const oracledb = {
+    OUT_FORMAT_OBJECT: 4002,
+    CLOB: 2017,
+    NCLOB: 2019,
+    fetchAsString: [] as number[],
+    async getConnection(config: Record<string, unknown>) {
+      const state: SqlDbState = { dialect: "oracle", config, queries: [], ended: false };
+      sqlDb.clients.push(state);
+      if (sqlDb.connectError) throw sqlDb.connectError;
+      return {
+        callTimeout: 0,
+        async execute(sql: string) {
+          // Oracle folds unquoted column names to upper case.
+          return { rows: sqlDbRun(state, sql).map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.toUpperCase(), v]))) };
+        },
+        async rollback() {
+          state.queries.push("ROLLBACK");
+        },
+        async close() {
+          state.ended = true;
+        },
+      };
+    },
+  };
+  return { default: oracledb };
+});
+
+vi.mock("mysql2/promise", () => ({
+  default: {
+    async createConnection(config: Record<string, unknown>) {
+      const state: SqlDbState = { dialect: "mysql", config, queries: [], ended: false };
+      sqlDb.clients.push(state);
+      if (sqlDb.connectError) throw sqlDb.connectError;
+      return {
+        async query(q: string | { sql: string }) {
+          return [sqlDbRun(state, typeof q === "string" ? q : q.sql)];
+        },
+        async end() {
+          state.ended = true;
+        },
+      };
+    },
+  },
+}));
+
 vi.mock("./drivers/net", () => ({ resolveSafeHost: async () => "203.0.113.10" }));
 vi.mock("@/lib/db/supabaseServer", () => ({ supabaseServiceRole: () => ({ rpc: async () => ({ data: 1, error: null }) }) }));
 vi.mock("@/lib/config/tenantConfig", () => ({ readTenantConfigStrict: async () => ({ "integration.allowedHosts": [] }) }));
@@ -106,7 +211,7 @@ import { BUILTIN_DEFINITIONS } from "./definitions";
 import { DefinitionConnector, capabilitiesOf, httpDriver, kindsOf, specsOf, writeCapabilitiesOf, writeIsRepeatable } from "./engine";
 import { ConnectorRequestError, LIMITS, type FetchLike } from "./http";
 import { fillTemplate, mapRecord, readPath, templateVariables } from "./mapping";
-import { validateDefinition } from "./validate";
+import { validateDefinition, validateSettings } from "./validate";
 import { REST_API_KEY, expandDefinition } from "./restApi";
 import {
   CANONICAL_FIELDS,
@@ -1454,6 +1559,236 @@ describe("contract: powershell connector windows-powershell", () => {
   });
 });
 
+// ---------------------------------------------------------------- sql: SQL Server, Oracle, MySQL and your own queries
+
+type SqlDbCase = {
+  key: string;
+  settings: Json;
+  /** How the driver opened the connection, for the login with these secrets. */
+  login: (config: Json, user: string, password: string) => void;
+  testStatements: string[];
+  limit: (n: number) => RegExp;
+  start: string;
+  rollback: RegExp;
+  account: Json;
+  accountId: string;
+  grant: Json;
+  grantId: string;
+  authError: Error;
+};
+
+const SQL_DB_CASES: SqlDbCase[] = [
+  {
+    key: "sql-server",
+    settings: { url: "sqlserver://db.contract.test:1433/app" },
+    login: (c, user, password) =>
+      expect(c).toMatchObject({
+        server: "203.0.113.10",
+        authentication: { type: "default", options: { userName: user, password } },
+        options: { port: 1433, database: "app", encrypt: true, trustServerCertificate: false, serverName: "db.contract.test", readOnlyIntent: true },
+      }),
+    testStatements: ["SET ROWCOUNT 1; BEGIN TRANSACTION", "SELECT SUSER_SNAME() AS login_name", "IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION; SET ROWCOUNT 0"],
+    limit: (n) => new RegExp(`^SET ROWCOUNT ${n};`),
+    start: "SET ROWCOUNT",
+    rollback: /^IF @@TRANCOUNT > 0 ROLLBACK/,
+    account: { name: "ana", login_type: "SQL_LOGIN", status: "active", privileged: 1, create_date: "2026-01-02T03:04:05Z" },
+    accountId: "ana",
+    grant: { member: "ana", role: "server:sysadmin" },
+    grantId: "ana>server:sysadmin",
+    authError: Object.assign(new Error("Login failed for user 'loginA'."), { code: "ELOGIN" }),
+  },
+  {
+    key: "oracle-database",
+    settings: { url: "oracle://db.contract.test:2484/FREEPDB1" },
+    login: (c, user, password) => expect(c).toMatchObject({ user, password, connectString: "tcps://db.contract.test:2484/FREEPDB1" }),
+    testStatements: ["SET TRANSACTION READ ONLY", "SELECT * FROM (SELECT USER AS login_name FROM DUAL) wonderid_source WHERE ROWNUM <= 1", "ROLLBACK"],
+    limit: (n) => new RegExp(`WHERE ROWNUM <= ${n}$`),
+    start: "SET TRANSACTION READ ONLY",
+    rollback: /^ROLLBACK$/,
+    account: { username: "ANA", status: "active", privileged: 0, created: "2026-01-02T03:04:05Z", last_login: null, expiry_date: null },
+    accountId: "ANA",
+    grant: { member: "ANA", role: "FINANCE", admin_option: "NO" },
+    grantId: "ANA:FINANCE",
+    authError: Object.assign(new Error("ORA-01017: invalid credential or not authorized; logon denied"), { errorNum: 1017 }),
+  },
+  {
+    key: "mysql",
+    settings: { url: "mysql://db.contract.test:3306/app" },
+    login: (c, user, password) => expect(c).toMatchObject({ host: "db.contract.test", port: 3306, database: "app", user, password, multipleStatements: false, ssl: { rejectUnauthorized: true, verifyIdentity: true } }),
+    testStatements: ["START TRANSACTION READ ONLY", "SELECT * FROM (SELECT CURRENT_USER() AS login_name) AS wonderid_source LIMIT 1", "ROLLBACK"],
+    limit: (n) => new RegExp(`LIMIT ${n}$`),
+    start: "START TRANSACTION READ ONLY",
+    rollback: /^ROLLBACK$/,
+    account: { id: "ana@%", username: "ana", host: "%", status: "active", privileged: 0 },
+    accountId: "ana@%",
+    grant: { member: "ana@%", role: "finance@%", admin_option: "N" },
+    grantId: "ana@%>finance@%",
+    authError: Object.assign(new Error("Access denied for user 'loginA'@'203.0.113.9' (using password: YES)"), { code: "ER_ACCESS_DENIED_ERROR" }),
+  },
+  {
+    key: "sql-database",
+    settings: {
+      url: "mariadb://db.contract.test/app",
+      application: "Payroll",
+      accountQuery: "SELECT id, login AS username, mail AS email, state AS status, is_admin AS privileged FROM app_users",
+      grantQuery: "SELECT user_id AS account_id, role_code AS entitlement_id FROM app_user_roles",
+    },
+    login: (c, user, password) => expect(c).toMatchObject({ host: "db.contract.test", port: 3306, user, password, ssl: { rejectUnauthorized: true } }),
+    testStatements: ["START TRANSACTION READ ONLY", "SELECT * FROM (SELECT 1 AS ok) AS wonderid_source LIMIT 1", "ROLLBACK"],
+    limit: (n) => new RegExp(`LIMIT ${n}$`),
+    start: "START TRANSACTION READ ONLY",
+    rollback: /^ROLLBACK$/,
+    account: { id: 7, username: "ana", email: "ANA@X.TEST", status: "Active", privileged: "yes" },
+    accountId: "7",
+    grant: { account_id: 7, entitlement_id: "payroll-admin" },
+    grantId: "7>payroll-admin",
+    authError: Object.assign(new Error("Access denied for user 'loginA'"), { code: "ER_ACCESS_DENIED_ERROR" }),
+  },
+];
+
+for (const tc of SQL_DB_CASES) {
+  const def = BUILTIN_DEFINITIONS.find((d) => d.key === tc.key)!;
+
+  describe(`contract: sql connector ${tc.key}`, () => {
+    const config = builtin(def, tc.settings);
+    const secrets = (tag: string) => ({ username: `login${tag}`, password: `Pw${tag}Zq9` });
+    const reads = (i = 0) => sqlDb.clients[i].queries.filter((q) => !q.startsWith(tc.start) && !tc.rollback.test(q));
+
+    beforeEach(() => {
+      sqlDb.clients.length = 0;
+      sqlDb.rows = [tc.account];
+      sqlDb.connectError = null;
+      sqlDb.failOn = null;
+    });
+    const connect = async (tag = "A", d: ConnectorDefinition = def) => {
+      const c = new DefinitionConnector({ sql: sqlDriver });
+      await c.authenticate(d === def ? config : custom(d, tc.settings), JSON.stringify(secrets(tag)));
+      return c;
+    };
+
+    it("authentication: logs in with the secrets over verified TLS; a refused login fails without the password", async () => {
+      const c = await connect();
+      expect(await c.testConnection()).toEqual({ ok: true });
+      tc.login(sqlDb.clients[0].config, "loginA", "PwAZq9");
+      sqlDb.connectError = tc.authError;
+      const denied = await (await connect()).testConnection();
+      expect(denied.ok).toBe(false);
+      expect(denied.message).not.toContain("PwAZq9");
+      expect(classifyOutboundError(tc.authError).category).toBe("auth");
+    });
+
+    it("discovery: the test is one read-only statement; the connector declares reads and can never write", async () => {
+      const c = await connect();
+      await c.testConnection();
+      expect(sqlDb.clients[0].queries).toEqual(tc.testStatements);
+      expect(capabilitiesOf(def)).toMatchObject({ importAccounts: true, importEntitlements: true, importAccess: true, provision: false, deprovision: false });
+      expect(Object.values(writeCapabilitiesOf(def)).some(Boolean)).toBe(false);
+      const otherDialect = tc.key === "sql-database" ? "ldaps://db.contract.test" : tc.key === "mysql" ? "postgres://db.contract.test/app" : "mysql://db.contract.test/app";
+      expect(validateSettings(def, { ...tc.settings, url: otherDialect }).issues.map((i) => i.path)).toEqual(["settings.url"]);
+    });
+
+    it("pagination: one statement cut at the record limit; a result at the limit is truncated", async () => {
+      const c = await connect();
+      await c.importKind("account");
+      expect(sqlDb.clients[0].queries.some((q) => tc.limit(LIMITS.defaultMaxRecords).test(q))).toBe(true);
+      expect(c.readReport("account").truncated).toBe(false);
+      const capped = structuredClone(def);
+      specsOf(capped, "account").forEach((s) => (s.maxRecords = 1));
+      const d = await connect("A", capped);
+      await d.importKind("account");
+      expect(sqlDb.clients[1].queries.some((q) => tc.limit(1).test(q))).toBe(true);
+      expect(d.readReport("account").truncated).toBe(true);
+      expect(gapFor(def, "pagination")).toBeDefined();
+    });
+
+    it("partial failure and retry: a failed statement fails its kind once and still rolls back", async () => {
+      const grantQuery = String(specsOf(def, "access_grant")[0].query);
+      const statement = grantQuery.startsWith("{settings.") ? String(tc.settings.grantQuery) : grantQuery;
+      sqlDb.failOn = new RegExp(statement.slice(0, 40).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      const c = await connect();
+      expect(await c.importKind("account")).toHaveLength(1);
+      await expect(c.importKind("access_grant")).rejects.toThrow(/Timeout/);
+      const q = sqlDb.clients[0].queries;
+      expect(q.filter((s) => sqlDb.failOn!.test(s))).toHaveLength(1);
+      expect(q[q.length - 1]).toMatch(tc.rollback);
+      expect(gapFor(def, "retry")).toBeDefined();
+    });
+
+    it("rate limiting: the Gateway paces the connect, the test and each statement", async () => {
+      const sleeps = await gatewayRun({ socketDrivers: { sql: sqlDriver } }, config, JSON.stringify(secrets("A")), async (c) => {
+        await c.testConnection();
+        await c.importKind("account");
+      });
+      const rate = def.rateLimitPerSecond ?? 10;
+      expect(sleeps).toEqual([1, 2].map((k) => Math.ceil((k / rate) * 1000)));
+    });
+
+    it("idempotency: every read is rolled back; a repeated row is kept once", async () => {
+      sqlDb.rows = [tc.account, tc.account];
+      const c = await connect();
+      expect(await c.importKind("account")).toHaveLength(1);
+      const q = sqlDb.clients[0].queries;
+      expect(q.filter((s) => s.startsWith(tc.start))).toHaveLength(q.filter((s) => tc.rollback.test(s)).length);
+    });
+
+    it("credential rotation: the next session logs in with the new secrets, and the old one is closed", async () => {
+      const c = await connect("A");
+      await c.testConnection();
+      await c.close();
+      await c.authenticate(config, JSON.stringify(secrets("B")));
+      await c.testConnection();
+      expect(sqlDb.clients[0].ended).toBe(true);
+      tc.login(sqlDb.clients[1].config, "loginB", "PwBZq9");
+    });
+
+    it("traceability: records are keyed by the system's own names and keep the catalog row", async () => {
+      const c = await connect();
+      const accounts = await c.importKind("account");
+      expect(accounts.map((a) => a.externalId)).toEqual([tc.accountId]);
+      expect(accounts[0].raw).toEqual(tc.account);
+      sqlDb.rows = [tc.grant];
+      const grants = await c.importKind("access_grant");
+      expect(grants.map((g) => g.externalId)).toEqual([tc.grantId]);
+      expect(reads().length).toBeGreaterThan(0);
+    });
+  });
+}
+
+describe("contract: sql connector sql-database, the organization's own statements", () => {
+  const def = BUILTIN_DEFINITIONS.find((d) => d.key === "sql-database")!;
+  const base = { url: "sqlserver://db.contract.test:1433/app", application: "Payroll" };
+
+  beforeEach(() => {
+    sqlDb.clients.length = 0;
+    sqlDb.rows = [{ id: 7, username: "ana", email: "ANA@X.TEST", status: "Active", privileged: "yes" }];
+    sqlDb.connectError = null;
+    sqlDb.failOn = null;
+  });
+
+  it("refuses a statement that writes, changes the session or reaches outside the database when it is saved", () => {
+    for (const bad of ["DELETE FROM users", "SELECT 1; DROP TABLE users", "SELECT * FROM users -- x", "EXEC xp_cmdshell 'dir'", "SELECT * INTO copy FROM users", "SELECT pg_sleep(10)", "SELECT * FROM OPENROWSET('SQLNCLI', 'x', 'y')"]) {
+      expect(validateSettings(def, { ...base, accountQuery: bad }).issues.map((i) => i.path), bad).toContain("settings.accountQuery");
+    }
+    expect(validateSettings(def, { ...base, accountQuery: "WITH u AS (SELECT * FROM app_users WHERE note <> 'drop; me') SELECT * FROM u ORDER BY id" }).issues).toEqual([]);
+  });
+
+  it("maps the fixed columns, reads nothing for an empty statement, and checks a stored statement again before it runs", async () => {
+    const c = new DefinitionConnector({ sql: sqlDriver });
+    await c.authenticate(builtin(def, { ...base, accountQuery: "SELECT * FROM app_users" }), JSON.stringify({ username: "u", password: "p" }));
+    const [ana] = await c.importKind("account");
+    expect(ana.normalized).toMatchObject({ externalId: "7", username: "ana", email: "ana@x.test", status: "active", privileged: true, application: "Payroll" });
+    const before = sqlDb.clients[0].queries.length;
+    expect(await c.importKind("identity")).toEqual([]);
+    expect(sqlDb.clients[0].queries).toHaveLength(before);
+    // A stored statement that was never validated (an older or edited row) still cannot run.
+    const tampered = new DefinitionConnector({ sql: sqlDriver });
+    await tampered.authenticate(custom(def, { ...base, accountQuery: "SELECT 1" }), JSON.stringify({ username: "u", password: "p" }));
+    (tampered as unknown as { settings: Json }).settings.accountQuery = "UPDATE app_users SET admin = 1";
+    await expect(tampered.importKind("account")).rejects.toThrow(/^The query must be a SELECT/);
+    expect(sqlDb.clients.at(-1)!.queries.some((q) => /UPDATE/.test(q))).toBe(false);
+  });
+});
+
 // ---------------------------------------------------------------- file (CSV)
 
 const csvDef = BUILTIN_DEFINITIONS.find((d) => d.key === "csv-file")!;
@@ -1785,7 +2120,7 @@ describe("contract: every built-in is covered for every property, or has a docum
   });
 
   it("each non-http built-in has its own block above", () => {
-    const covered = new Set(["ldap-directory", "active-directory", "postgresql", "windows-powershell", "csv-file", "mcp-server", "webhook", "runtime-gateway", "scim-inbound"]);
+    const covered = new Set(["ldap-directory", "active-directory", "postgresql", "sql-server", "oracle-database", "mysql", "sql-database", "windows-powershell", "csv-file", "mcp-server", "webhook", "runtime-gateway", "scim-inbound"]);
     expect(BUILTIN_DEFINITIONS.filter((d) => d.driver !== "http" && !covered.has(d.key)).map((d) => d.key)).toEqual([]);
   });
 });

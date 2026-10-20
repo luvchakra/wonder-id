@@ -3221,3 +3221,53 @@ contract block (8, all nine properties tested; pagination, retry and rate
 limiting have documented gaps). Not yet run against a real Windows server
 (`live.test.ts` needs a connections file with one); the WinRM exchange is
 tested against a fake endpoint.
+## 2026-10-20 — Database connectors (fix list item 19, INTEGRATION-P0-33)
+
+The sql driver (`framework/drivers/sql.ts`) now speaks four databases,
+picked by the address's scheme (`framework/sqlDialects.ts`):
+PostgreSQL (`pg`, unchanged), Microsoft SQL Server (`tedious` 20.3.3),
+Oracle Database (`oracledb` 6.10.0, thin mode, no client libraries) and
+MySQL/MariaDB (`mysql2` 3.24.5). Every one connects over TLS with the
+certificate checked against the host name, runs each statement in a
+read-only session (on SQL Server, which has none, a transaction that is
+always rolled back, with the read-only application intent), under a
+statement timeout and a row limit. SQL Server and MySQL connect to the
+address `resolveSafeHost` vetted; the Oracle thin driver has no socket hook,
+so it opens its own socket by host name right after the check (recorded as
+a known gap in the framework doc).
+
+New built-ins: `sql-server` (logins, server and database roles,
+membership), `oracle-database` (users, roles, role grants; Oracle-maintained
+users left out), `mysql` (accounts, MySQL 8 roles, role grants) and
+`sql-database`, which reads identities, accounts, entitlements and access
+with SELECT statements the organization enters (a resource whose `query`
+is exactly `{settings.<key>}`). Those statements are checked by
+`sqlQueryIssues()` in `validateSettings()` when the connection is saved and
+again in the driver before each run. The check was tightened for every
+definition: no comments, backslashes, dollar or q-quotes (each could make
+the check read a literal differently from the database), no `EXEC`,
+`INTO`, `FOR UPDATE`, and no `xp_`/`sp_`/`dbms_`/`utl_`/`OPENROWSET`/sleep
+functions. Additive type changes: `ConnectorDefinition.sqlDialects` and
+the Oracle-only `wallet`/`walletPassword` on `sql_password` auth (a PEM
+wallet secret: the thin driver takes a private CA only inside one).
+`classifyOutboundError` now also files SQL Server, MySQL and Oracle login
+refusals as `auth`.
+
+Sybase (SAP ASE) and IBM Db2 are not included: no maintained JavaScript
+driver speaks TDS 5.0 or DRDA; the existing ones need Java or native
+libraries the Vercel runtime lacks. CSV export is the path for them.
+
+Verified:
+- `npx vitest run modules/integrations tests/architecture`: all pass
+  (contract blocks for the four new built-ins, nine properties each, plus
+  `sqlDialects.test.ts`); connector-boundary test unchanged and passing.
+- Live, with `live.test.ts` and the Gateway (allowed-hosts read stubbed),
+  against PostgreSQL 16, SQL Server 2022, MySQL 8.4 and Oracle Database Free
+  23 in containers behind a private CA: all 8 connections (4 catalog, 4
+  own-query) tested and imported every kind. A wrong host name, a missing CA
+  and a wrong password were refused on each.
+- `npm run typecheck`, eslint on the changed files, `npm audit --omit=dev
+  --audit-level=high` (clean; tedious 20.3.3 carries a moderate sprintf-js
+  advisory fixed only in releases under two weeks old).
+
+No allowlist of the connector-boundary test was widened. No migration.

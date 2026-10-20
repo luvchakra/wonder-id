@@ -66,7 +66,7 @@ WonderID ◀── /api/connect receivers ────────────�
      token bucket. This used to live in the http driver alone; it now
      covers MCP, LDAP and SQL too.
   4. HTTP and MCP then go through `guardedFetch` (SSRF guard, redirects,
-     20 s timeout, 10 MB response cap). LDAP and PostgreSQL connect only
+     20 s timeout, 10 MB response cap). LDAP and the databases connect only
      to an address `resolveSafeHost` vetted, with their own timeouts and
      row limits.
 - **Traffic ledger** (`connector_traffic`, migration 0110). Each request is
@@ -226,6 +226,10 @@ owner's action.
 | `mattermost` | application | http | accounts and bots, teams, membership |
 | `nextcloud` | application | http | accounts, groups, membership |
 | `postgresql` | database | sql | logins, group roles with their table privileges, membership |
+| `sql-server` | database | sql | server logins (sysadmin / CONTROL SERVER flagged), server roles and the connected database's roles, membership |
+| `oracle-database` | database | sql | users (locked, expired, last login, DBA / ANY privileges flagged), roles with their privilege counts, role grants |
+| `mysql` | database | sql | accounts (user@host; SUPER, GRANT, FILE flagged), MySQL 8 roles, role grants |
+| `sql-database` | database | sql | identities, accounts, entitlements and access from your own SELECT statements, on any of the databases above or MariaDB |
 | `windows-powershell` | infrastructure | powershell | a Windows server's local accounts, local groups (Administrators flagged admin), membership, over WinRM; **writes** (once turned on): disable an account, add and remove group members. Not yet certified against a real server with `live.test.ts` |
 | `openbao` | secrets | http | AppRoles, userpass logins, policies, assignments |
 | `kubernetes` | infrastructure | http | service accounts, Roles and ClusterRoles, bindings |
@@ -239,6 +243,46 @@ owner's action.
 
 Each one is verified against a real system by
 `modules/integrations/framework/live.test.ts` (see "Certifying a connector").
+
+### Databases
+
+The `sql` driver speaks four protocols, chosen by the address's scheme
+(`modules/integrations/framework/sqlDialects.ts`):
+
+| Scheme | Database | Library | Read-only session | Row limit |
+|---|---|---|---|---|
+| `postgres://`, `postgresql://` | PostgreSQL (and compatible services) | `pg` | `BEGIN READ ONLY` … `ROLLBACK` | `LIMIT n` around the statement |
+| `sqlserver://`, `mssql://` | Microsoft SQL Server, Azure SQL | `tedious` | read-only application intent, in a transaction that is always rolled back (T-SQL has no read-only transaction) | `SET ROWCOUNT n` |
+| `oracle://host:2484/service` | Oracle Database (TCPS listener) | `oracledb` (thin mode, no client install) | `SET TRANSACTION READ ONLY` … rollback | `ROWNUM <= n` around the statement |
+| `mysql://`, `mariadb://` | MySQL, MariaDB | `mysql2` | `START TRANSACTION READ ONLY` … `ROLLBACK` | `LIMIT n` around the statement |
+
+- **Always verified TLS.** The certificate is checked against the host name
+  in the address and verification is never turned off. The socket goes to
+  the address `resolveSafeHost` vetted (PostgreSQL, SQL Server, MySQL); the
+  Oracle thin driver opens its own socket by host name right after the check.
+- **Timeouts.** Connect 10 s; each statement 30 s, or `timeoutSeconds`
+  (5–120) where a definition offers it.
+- **Column names.** Oracle's are lower-cased (it folds unquoted names to
+  upper case), so a mapping reads the same names on every database.
+- **Your own statements.** A resource whose `query` is exactly
+  `{settings.<key>}` runs the statement the organization entered in that
+  text setting. `validateSettings()` holds it to the definition rules when
+  the connection is saved, and the driver checks it again before each run.
+  An empty setting reads nothing. `sql-database` works this way: each
+  statement returns fixed column names (listed in each setting's help).
+- **`sqlDialects`** on a definition names the databases its queries are
+  written for; the address must be one of them.
+- **Oracle and a private CA.** The thin driver takes a CA only inside a PEM
+  wallet (`ewallet.pem`: a key, its certificate and the CA), so it is an
+  optional `wallet` secret (with `walletPassword`), declared in `auth`.
+- **Not supported: Sybase (SAP ASE) and IBM Db2.** Their protocols (TDS 5.0,
+  DRDA) have no maintained pure-JavaScript driver; the available ones need
+  Java or native client libraries, which the hosting runtime does not have.
+  Export to CSV (the `csv-file` connector) in the meantime.
+- **Verified live** (2026-10-20) with `live.test.ts` against PostgreSQL 16,
+  SQL Server 2022, MySQL 8.4 and Oracle Database Free 23 in containers, each
+  behind a private CA. A wrong host name, a missing CA and a wrong password
+  were each refused.
 
 ## Receiving: how systems send WonderID data
 
@@ -706,7 +750,7 @@ The same operations are available over the API (session authentication):
 | `key` | Stable id: lowercase letters, digits and dashes, 2–63 characters. The keys of built-in connectors are reserved. |
 | `version` | `major.minor.patch`. A published version never changes. |
 | `category` | `hr`, `identity_provider`, `directory`, `application`, `database`, `secrets`, `infrastructure` or `other` |
-| `driver` | `http` (REST/JSON), `ldap` (LDAPS), `sql` (PostgreSQL), `mcp` (an MCP server over Streamable HTTP), `file` (CSV files), `powershell` (PowerShell scripts on a Windows server over WinRM, see "The powershell driver"), or `none` (receives only) |
+| `driver` | `http` (REST/JSON), `ldap` (LDAPS), `sql` (PostgreSQL, SQL Server, Oracle, MySQL/MariaDB; the address scheme picks one), `mcp` (an MCP server over Streamable HTTP), `file` (CSV files), `powershell` (PowerShell scripts on a Windows server over WinRM, see "The powershell driver"), or `none` (receives only) |
 | `settings` | Non-secret values the organization enters. `type` is `url`, `string`, `number`, `boolean` or `select` (with `options`). Each has an optional `default`. One `url` setting is the base address (`baseUrl` when present). |
 | `auth` | How to authenticate. Secret values are declared in `auth.fields` and referenced only as `{secret.<key>}`. |
 | `test` | A cheap authenticated call (`request`, `search`, `query` or `rpc`) that proves the connection works. A `none` or `file` connector has none (a file connection's test reads its addresses). |
@@ -874,10 +918,13 @@ These hold for built-in and custom definitions alike:
 - Requests and next-page links stay on the origins of the organization's url
   settings. Every address also passes WonderID's outbound guard: no private,
   loopback or metadata addresses.
-- LDAP is `ldaps://` only, and PostgreSQL always uses verified TLS. A private
-  CA goes in a `caCertificate` setting; verification is never turned off.
-- SQL is a single read-only statement: no DML, no DDL, `COPY` or `SET`, and
-  no file or sleep functions.
+- LDAP is `ldaps://` only, and every database always uses verified TLS. A private
+  CA goes in a `caCertificate` setting (Oracle: a PEM wallet secret, the thin
+  driver takes a CA only inside one); verification is never turned off.
+- SQL is a single read-only statement: no DML, no DDL, `COPY`, `SET`, `EXEC`
+  or `INTO`, no comments, no backslashes, dollar or q-quotes, and no file,
+  network, sleep or `dbms_`/`utl_`/`xp_` functions (`sqlQueryIssues()` in
+  `sqlDialects.ts`). See "Databases" under "Built-in connectors".
 - PowerShell runs over WinRM on `https://` only. A script holds no
   templates (values are parameters), and a read or test script may not use a
   command that changes something (see "The powershell driver").

@@ -16,6 +16,8 @@
  * would need code belongs in a driver, which WonderID owns and reviews.
  */
 
+import type { SqlDialect } from "./sqlDialects";
+
 export const DEFINITION_SCHEMA_VERSION = 1;
 
 export const CONNECTOR_CATEGORIES = [
@@ -225,7 +227,13 @@ export type AuthSpec =
   /** INTEGRATION-P0-21: mutual TLS: the connection presents a client certificate (PEM) to its own address only. */
   | { type: "client_certificate"; certificate: string; privateKey: string; fields: SecretField[] }
   | { type: "ldap_simple"; bindDn: string; password: string; fields: SecretField[] }
-  | { type: "sql_password"; username: string; password: string; fields: SecretField[] };
+  /**
+   * A database login. Oracle only: `wallet` is a PEM wallet (ewallet.pem:
+   * key, certificate and the CA that signed the listener's certificate)
+   * for a listener whose certificate is not publicly trusted, and
+   * `walletPassword` decrypts its key.
+   */
+  | { type: "sql_password"; username: string; password: string; wallet?: string; walletPassword?: string; fields: SecretField[] };
 
 export type Pagination =
   | { type: "none" }
@@ -341,7 +349,11 @@ export type ResourceSpec = {
   pagination?: Pagination;
   /** ldap driver */
   search?: { base: string; filter: string; scope?: "base" | "one" | "sub"; attributes?: string[] };
-  /** sql driver: one read-only statement. */
+  /**
+   * sql driver: one read-only statement, or exactly `{settings.<key>}` for a
+   * statement the organization enters (checked by sqlQueryIssues() on save
+   * and before each run). An empty setting reads nothing.
+   */
   query?: string;
   /** powershell driver: the script whose output objects are the records. */
   powershell?: PowerShellSpec;
@@ -466,6 +478,11 @@ export type ConnectorDefinition = {
   receive?: ReceiveSpec;
   /** What this connector can change in the system (see WriteSpec). Absent: read-only. */
   write?: Partial<Record<DefinitionWriteOperation, WriteSpec>>;
+  /**
+   * sql driver: the databases this definition's queries are written for
+   * (sqlDialects.ts); the address must be one of them. Absent: any.
+   */
+  sqlDialects?: SqlDialect[];
   /** Requests per second (default 10). */
   rateLimitPerSecond?: number;
   /** Where an integrator can read about this product's API. */

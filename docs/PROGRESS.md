@@ -14,7 +14,7 @@ Generated 2026-10-20 from 11 module backlogs.
 
 ## Overall
 
-**241 of 278 tracked stories complete — 87%**
+**242 of 279 tracked stories complete — 87%**
 
 ```
 ███████████████████████████████████░░░░░  87%
@@ -22,11 +22,11 @@ Generated 2026-10-20 from 11 module backlogs.
 
 | Status | Stories |
 |---|---|
-| Done | 241 |
+| Done | 242 |
 | Partial | 22 |
 | Deferred | 2 |
 | Not Started | 13 |
-| **Total tracked** | **278** |
+| **Total tracked** | **279** |
 
 Beyond these, the backlogs list **53 P1** and **32 P2** forward-looking items.
 Those are prose scope bullets rather than tracked stories, so they carry no status
@@ -40,7 +40,7 @@ and are deliberately excluded from the counts above.
 |---|---|---|---|---|---|---|---|
 | 01 | [Foundation Agent](plan/01-FOUNDATION-AGENT-BACKLOG.md) | 43 | 2 | 0 | 2 | 47 | `████████████████░░` 91% |
 | 02 | [Identity Agent](plan/02-IDENTITY-AGENT-BACKLOG.md) | 20 | 0 | 0 | 1 | 21 | `█████████████████░` 95% |
-| 03 | [Integration Agent](plan/03-INTEGRATION-AGENT-BACKLOG.md) | 28 | 3 | 0 | 0 | 31 | `████████████████░░` 90% |
+| 03 | [Integration Agent](plan/03-INTEGRATION-AGENT-BACKLOG.md) | 29 | 3 | 0 | 0 | 32 | `████████████████░░` 91% |
 | 04 | [Access Agent](plan/04-ACCESS-AGENT-BACKLOG.md) | 32 | 1 | 0 | 0 | 33 | `█████████████████░` 97% |
 | 05 | [Runtime Agent](plan/05-RUNTIME-AGENT-BACKLOG.md) | 13 | 0 | 0 | 0 | 13 | `██████████████████` 100% |
 | 06 | [Risk Agent](plan/06-RISK-AGENT-BACKLOG.md) | 14 | 2 | 0 | 0 | 16 | `████████████████░░` 88% |
@@ -144,7 +144,7 @@ and are deliberately excluded from the counts above.
 
 **Module:** Integration Hub & Connectors  
 **Backlog status:** DORMANT — do not start until the user says "Run Integration Agent"  
-**Stories:** 28 done · 3 partial · 0 deferred · 0 not started (31 tracked) · 2 P1 / 3 P2 ahead
+**Stories:** 29 done · 3 partial · 0 deferred · 0 not started (32 tracked) · 2 P1 / 3 P2 ahead
 
 | Story | Title | Status |
 |---|---|---|
@@ -179,6 +179,7 @@ and are deliberately excluded from the counts above.
 | INTEGRATION-P0-22 | Standard provisioning: SCIM and LDAP (F3) | Partial — 2026-10-12 slice 1: built-in `scim-2` connection type (users, groups, membership with RFC 7644 paging; add and remove group members, disable and create users through the existing write pipeline, off until turned on). Slice 2: LDAP writes (`{ ldap: { dn, modify |
 | INTEGRATION-P0-31 | MCP tools that are AI agents: the server's own `_meta` declaration first, then the name/description guess; listed as AI agents and offered to Agent Discovery (owner requests 2026-10-14/15) | Done — 2026-10-15: `readToolDeclaration` (exact `wonderapps.biz/entity` and `wonderapps.biz/ai` keys, known values only), kept by the mcp driver and definition; `classifyToolKind` declaration-first ("Declared by the server"); "AI agents" section on `/integrations/mcp` with "Answers only" / "Drafts only" and "AI-generated output"; AI tools are Agent Discovery candidates (#220). A label only: no permission, risk or autonomy depends on it |
 | INTEGRATION-P0-32 | Generic REST API connection type (fix-list item 19, owner request 2026-10-20): any REST/JSON API configured in the connection's settings, all sign-in styles, paging, mappings and changes | Done — 2026-10-20: built-in `rest-api`; `restApi.ts` builds the definition from the settings and holds it to `validateDefinition`; runs the full http connector contract; `restApi.test.ts` 13/13 |
+| INTEGRATION-P0-33 | Database connectors: SQL Server, Oracle and MySQL/MariaDB on the sql driver, a catalog connection type for each, and Database (your own queries) for any of them (fix list item 19) | Done — 2026-10-20: dialect chosen by the address scheme (`sqlDialects.ts`), read-only session, timeout and row limit on each; verified TLS always; `sql-server`, `oracle-database`, `mysql` and `sql-database` built-ins; organization-entered SELECTs checked on save and before each run; contract tests and a live run against all four databases. Sybase and Db2 not supported (no JavaScript driver) |
 
 ### 04 — Access Agent
 

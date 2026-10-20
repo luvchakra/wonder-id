@@ -46,6 +46,7 @@ What WonderID does today and what comes next, phase by phase. Built from the [kn
 - ✅ Built-in connectors (HR, identity provider, LDAP, Active Directory, applications)
 - ✅ Generic REST API connector, configured in its settings
 - ✅ PowerShell connector (Windows servers over WinRM, scripts with any parameters)
+- ✅ Database connectors (PostgreSQL, SQL Server, Oracle, MySQL, your own queries)
 - ✅ CSV import and export
 - ✅ Accounts inventory: orphaned, dormant, privileged
 - ✅ Reconciliation of accounts, entitlements and grants

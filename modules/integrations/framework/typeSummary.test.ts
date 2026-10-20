@@ -36,7 +36,7 @@ describe("describeConnectionType", () => {
     expect(ldap.pagination).toEqual(["LDAP paged results"]);
     expect(ldap.rateLimitPerSecond).toBe(10);
     const sql = describeConnectionType(byKey("postgresql"), "builtin");
-    expect(sql.protocol).toBe("SQL (PostgreSQL, TLS)");
+    expect(sql.protocol).toBe("SQL (PostgreSQL, SQL Server, Oracle, MySQL; TLS)");
     expect(sql.pagination).toEqual(["One query, row-limited"]);
     const mcp = describeConnectionType(byKey("mcp-server"), "builtin");
     expect(mcp.protocol).toBe("MCP (Streamable HTTP)");
