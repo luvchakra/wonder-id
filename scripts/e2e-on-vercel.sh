@@ -182,8 +182,17 @@ node -e '
 if [ "$status" = "124" ]; then
   log "The suite did not finish within 35 minutes"
 elif [ "$status" != "0" ]; then
-  log "The suite failed (exit $status); the last server log lines:"
-  tail -40 /tmp/e2e-server.log
+  # The server's own errors, without the noise of aborted streams (a test
+  # that moves on closes the page while it still streams), so a failed
+  # server action shows its cause.
+  log "The suite failed (exit $status); the server's errors:"
+  grep -v -e "destination stream closed early" -e "^\[perf\]" /tmp/e2e-server.log | grep -A 4 "⨯" | grep -v -e "^--$" | tail -80
+  # What each failed test's page showed when it failed (its accessibility
+  # snapshot), so a missing element can be told from an error page.
+  find test-results -name error-context.md -path '*retry*' 2>/dev/null | head -5 | while IFS= read -r f; do
+    log "Page at failure: $f"
+    grep -v "^\s*$" "$f" | head -60
+  done
 fi
 [ "$status" = "0" ] && log "The suite passed"
 exit "$status"

@@ -2622,3 +2622,27 @@ new connection took 225 ms.
   request.
 - `approval-engine` and `birthright`, which failed in the first, cut-off
   run, passed.
+
+## 2026-10-20 — Nightly of 20 Oct: one failure, and failures made diagnosable
+
+**The run:** parts 1, 2 and 4 passed; part 3 had 248 passed, 1 failed, 2
+flaky. The failure: `ownership-contract.spec.ts:60`. The first attempt's
+setup timed out on Register (the page stayed on `/agents/new` for 20 s); on
+the retry, after "Confirm ownership" was refused as expected, assigning the
+business owner did not show the owner within 20 s. The log kept only the last
+40 server lines (aborted-stream noise and `[perf]` lines), so the cause
+(a slow server action or one that threw, showing the error page) could not
+be told from the log, and this container has no E2E credentials to run the
+spec locally.
+
+**Changed:** `scripts/e2e-on-vercel.sh` now prints, on failure, the server's
+own errors (`⨯` lines with their next four lines, without the
+"destination stream closed early" and `[perf]` noise) and, for up to five
+failed retries, the page snapshot Playwright saved (`error-context.md`), so
+the next failure says whether the page was an error page or just slow.
+
+**Performance numbers after round 4 (#253), production (carried from the
+previous session):** dashboard Supabase calls 44 → 24; common pages'
+Supabase span about 260–370 ms; `my_access_context` typically 40–150 ms;
+`scripts/perf-pages.mjs` median 1,009 ms, within noise of 969 ms after
+round 2.

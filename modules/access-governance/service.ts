@@ -130,6 +130,8 @@ export {
   repairApprovalChains,
   getRequestWithApprovals,
   listRequestIdsAwaiting,
+  pendingApproversFor,
+  type PendingApprover,
   type ApprovalStep,
   type ApprovalView,
   type ApproverActor,

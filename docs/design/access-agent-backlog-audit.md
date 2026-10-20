@@ -4747,3 +4747,32 @@ each step. Recorded as possible follow-ups, not built.
 The owner asked for the app to be faster. This module's part, with numbers,
 verification and what was left out, is in `docs/design/qa-agent-backlog-audit.md`
 (2026-10-19). The rules that came out of it are CLAUDE.md §15.1.
+
+## 2026-10-20 — Requests list: the number opens the request, and a waiting request says whom it waits on (owner feedback)
+
+Owner's test feedback (item 14, "WonderID Test Feedback"): the list could be
+arranged better, the request numbers should be clickable, and it should show
+properly from whom the approval is pending.
+
+**Changed:**
+- `app/(customer)/access/requests/page.tsx`: a first column, Request, with
+  the request number (a link to the request) and the date requested. The
+  separate Requested column (date and justification) is gone, so the line
+  has the same six columns; the justification stays on the request's page.
+- A waiting request shows "Waiting on …" under its status: the named person
+  of each open step, else the role ("their manager"), "any member of
+  <group>", or "an access manager"; more than three are folded ("A, B and 2
+  more"). `waitingOn()` in `labels.ts`.
+- `pendingApproversFor()` (`modules/access-governance/approvals.ts`): one
+  read of the open steps of the page's waiting requests (as the user, under
+  RLS, tenant-filtered), then the names and group names in parallel; read
+  alongside the fulfilment progress, not after it (§15.1 rule 1).
+
+**Verified:** `labels.test.ts` (17 with the existing ones, all pass);
+typecheck clean apart from the 14 image-module errors main shows in a
+checkout without `next-env.d.ts`; eslint clean on the changed files. The
+E2E specs that open a request from the list click the row's first link,
+which is now the number and still opens the request.
+
+**Left out:** nothing else on the list changed; agent requests (no approval
+chain) show no "Waiting on" line.
