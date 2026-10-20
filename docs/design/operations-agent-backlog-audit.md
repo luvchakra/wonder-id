@@ -1051,3 +1051,54 @@ The Audit Trail (`/audit`) shows, under an event's action, a folded
 drops malformed entries): each field with old → new, or why its values are
 not shown. No new controls beyond the fold. Details and verification are in
 the Foundation audit log's entry of the same date.
+
+## 2026-10-20 — The organization's own mail server (owner test feedback item 14)
+
+Owner request: "Define a new admin menu under Org settings for SMTP setup,
+keep generic configs."
+
+Built:
+- **Migration 0208** (applied to the project and read back: RLS on, no
+  client policy, `record_provenance` trigger): `tenant_smtp_settings`, one
+  row per organization: host, port, security (`ssl` or `starttls`; plain
+  SMTP is refused so a password never crosses the network in the clear),
+  user name, encrypted password, From address and name, on/off, and the
+  last test's time, result and error. Service role only, like
+  `integration_credentials` (§14); on the provenance list (§19.10), shown
+  on the page from the service because `getRecordProvenance` reads under
+  RLS.
+- **`modules/operations/smtpSettings.ts`**: get (password never returned,
+  only whether one is stored), save (encrypts with `encryptSecret`; a
+  removed user name drops the password; a change clears the last test),
+  remove, and send a test to the signed-in administrator, recording the
+  result. Every one is audited (`smtp_settings.created/updated/removed/
+  tested`), never with the password; the test's recipient is typed text.
+  Rules in `smtpRules.ts` (host name, port with SSL 465 / STARTTLS 587
+  defaults, password needed for a new user name, From address, From name
+  stripped of quotes, angle brackets and line breaks).
+- **`email.ts`**: one channel per send, resolved once per notification: the
+  organization's server when set and on, else Resend as before.
+  `sendTenantEmail` is published and now also sends Foundation's invitation
+  e-mail (`lib/users/users.ts`), which no longer calls Resend itself; its
+  entry left the outbound allowlist of the connector-boundary test.
+- **Page** `/settings/email`, Administration › Organization Settings ›
+  Email (SMTP), gated by `notification.manage` (the Notifications page's
+  permission): one form with Save; Send test e-mail and Remove server once
+  saved. Help guide (Notifications article), knowledge base, roadmap.
+- The SMTP send itself is the Integration module's new `smtp` driver
+  (non-negotiable #20); see the Integration audit log, same date.
+
+Verified: `npm run typecheck` (only the known missing-asset image errors of
+`app/welcome`); eslint on the changed files; `npx vitest run modules/operations
+lib/provenance tests/architecture modules/ui lib/users app/actions` — 33
+files, 261 tests passed, including new `smtpRules.test.ts` and three new
+`email.test.ts` cases (SMTP chosen over Resend, a failed SMTP send is "not
+sent", nothing configured is "not sent"). Isolation: `tests/operations/
+smtp-settings-isolation.sql` run on the project, rolled back: a member of
+the organization that owns the row sees 0 rows. Advisors: only the expected
+"RLS enabled, no policy" notice, as for the other secret tables.
+
+Not verified here: a real send through GoDaddy. This container cannot open
+SMTP connections (port 465 timed out), and the password can only be stored
+encrypted by the running app, so the owner saves the settings on the page
+and uses Send test e-mail.

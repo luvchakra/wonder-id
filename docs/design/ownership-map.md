@@ -165,6 +165,7 @@ excluded (list in the migration's header).
 | `risk_campaigns` / `risk_campaign_items` | RiskA | Planned — RISK-P1-03 (risk campaigns), not yet implemented |
 | `platform_announcements` | PA | Planned — PLATFORM-P0-05.4 (maintenance mode/platform announcements); Experience Agent will need a read-only contract to render these in the customer shell once built |
 | `notification_preferences` | OA | OPERATIONS-P0-05.1 (notification preferences) — migration `0048`, built 2026-09-14 |
+| `tenant_smtp_settings` | OA | The organization's own outgoing mail server (owner test feedback item 14) — migration `0208`, built 2026-10-20; service role only, password encrypted |
 | `governance_attestations` | CA | Planned — COMPLIANCE-P0-08 (broad Governance Attestation, resolved 2026-09-15), not yet implemented |
 
 ### Pending ownership/architecture decisions (2026-09-14 requirements refresh — not resolved, flagged for the user)

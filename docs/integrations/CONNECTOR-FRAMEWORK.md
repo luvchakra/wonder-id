@@ -24,6 +24,13 @@ Product modules read only what the framework stored.
 when any other module calls out or opens a machine route. Widening its
 allowlists needs the user's approval.
 
+An organization's own mail server is one of its systems too. The `smtp`
+driver (`framework/drivers/smtp.ts`, owner request 2026-10-20, test
+feedback item 14) sends the organization's e-mail through it, TLS only and
+behind the same address guard as the LDAP and SQL drivers. Operations'
+e-mail channel calls it through the module's published service; no
+allowlist was widened.
+
 ## The Connector Gateway
 
 User requirement (2026-10-10): "all such connections should pass through one

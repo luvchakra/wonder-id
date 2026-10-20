@@ -33,6 +33,7 @@ export { listConnectorTraffic, purgeConnectorTraffic, TRAFFIC_PAGE_SIZE, type Co
 export { importFileForObject, previewFileForObject, type FileImportResult, type FileImportPreview, type ImportPreviewRow } from "./fileImports";
 export { IMPORT_KINDS, PAGE_IMPORT_MAX_ROWS, MAX_IMPORT_BYTES, FileImportInvalidError, checkImportForm, tooLargeForImport, importScope, IMPORT_MANAGE_PERMISSION, type ImportKind } from "./fileImportRules";
 export { latestConnectorFile, type ConnectorFileInfo } from "./framework/files";
+export { sendSmtpMail, type SmtpServer, type SmtpMessage } from "./framework/drivers/smtp";
 export { setConnectionSchedule, getConnectionSchedule, runScheduledSyncs, type ScheduledRunSummary } from "./connectorSchedules";
 export { CONNECTION_SCHEDULES, type ConnectionSchedule } from "./connectorScheduleRules";
 export {
