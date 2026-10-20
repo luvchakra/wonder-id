@@ -13,6 +13,11 @@ import { WorkflowForm, WorkflowStatusButton } from "../WorkflowForm";
 // One approval workflow: its levels, the request policies that use it,
 // and, for access managers, its edit form and retire/restore.
 
+/** A policy's own form on the request policies page: its application's scope, or the organization default. */
+function policyHref(applicationId: string | null): string {
+  return applicationId ? `/access/request-policies?app=${applicationId}#set-policy` : "/access/request-policies#set-policy";
+}
+
 export default async function ApprovalWorkflowPage({ params }: { params: Promise<{ id: string }> }) {
   let ctx;
   try {
@@ -31,6 +36,16 @@ export default async function ApprovalWorkflowPage({ params }: { params: Promise
     canManage ? listGroups(tenantId) : Promise.resolve([]),
   ]);
   if (!w) notFound();
+
+  // Contextual nudges (owner test feedback item 16, 2026-10-20): where this
+  // workflow's approvers are set, from the kinds its levels use.
+  const kinds = new Set(w.levels.flatMap((l) => l.approvers.map((a) => a.kind)));
+  const sources = [
+    kinds.has("manager") || kinds.has("managers_manager") ? { label: "each person's manager in Workforce", href: "/identities/humans" } : null,
+    kinds.has("resource_owner") || kinds.has("application_owner") ? { label: "the owners in the Application Catalog", href: "/access" } : null,
+    kinds.has("group") ? { label: "the members of Groups", href: "/settings/groups" } : null,
+    kinds.has("access_managers") ? { label: "the access managers in Users & Roles", href: "/settings/users" } : null,
+  ].filter((x): x is { label: string; href: string } => x !== null);
 
   return (
     <div className="space-y-5">
@@ -57,6 +72,20 @@ export default async function ApprovalWorkflowPage({ params }: { params: Promise
               </li>
             ))}
           </ol>
+          {sources.length > 0 ? (
+            <p className="mt-3 text-xs text-muted-foreground" data-testid="workflow-approver-sources">
+              Approvers come from{" "}
+              {sources.map((src, i) => (
+                <span key={src.href}>
+                  {i > 0 ? (i === sources.length - 1 ? " and " : ", ") : null}
+                  <Link href={src.href} className="text-primary hover:underline">
+                    {src.label}
+                  </Link>
+                </span>
+              ))}
+              .
+            </p>
+          ) : null}
         </CardBody>
       </Card>
 
@@ -64,12 +93,24 @@ export default async function ApprovalWorkflowPage({ params }: { params: Promise
         <CardHeader title="Used by" description="Request policies that approve with this workflow." />
         <CardBody>
           {w.policies.length === 0 ? (
-            <EmptyState title="No policy uses it yet" description="Choose it as a request policy's approval workflow." />
+            <EmptyState
+              title="No policy uses it yet"
+              description="It applies once a request policy chooses it as its approval workflow."
+              action={
+                w.status === "active" ? (
+                  <Link href="/access/request-policies#set-policy" className="text-sm font-medium text-primary hover:underline">
+                    Set a request policy
+                  </Link>
+                ) : undefined
+              }
+            />
           ) : (
             <ul className="divide-y divide-border text-sm" data-testid="workflow-policies">
               {w.policies.map((p) => (
                 <li key={p.id} className="py-2">
-                  <span className="font-medium text-foreground">{p.name}</span>
+                  <Link href={policyHref(p.applicationId)} className="font-medium text-primary hover:underline">
+                    {p.name}
+                  </Link>
                   <span className="block text-xs text-muted-foreground">{p.applicationName ? `${p.applicationName}${p.entitlementName ? ` — ${p.entitlementName}` : ""}` : "Organization default"}</span>
                 </li>
               ))}

@@ -84,12 +84,12 @@ export async function listApprovalWorkflows(tenantId: string, opts: { activeOnly
 export async function getApprovalWorkflow(
   tenantId: string,
   id: string,
-): Promise<(ApprovalWorkflow & { summary: string[]; policies: { id: string; name: string; applicationName: string | null; entitlementName: string | null }[] }) | null> {
+): Promise<(ApprovalWorkflow & { summary: string[]; policies: { id: string; name: string; applicationId: string | null; applicationName: string | null; entitlementName: string | null }[] }) | null> {
   if (!UUID_RE.test(id)) return null;
   const supabase = await supabaseServer();
   const [{ data, error }, { data: policies, error: policyError }] = await Promise.all([
     supabase.from("approval_workflows").select().eq("tenant_id", tenantId).eq("id", id).maybeSingle(),
-    supabase.from("access_request_policies").select("id, name, applications(name, display_name), entitlements(name)").eq("tenant_id", tenantId).eq("approval_workflow_id", id).limit(500),
+    supabase.from("access_request_policies").select("id, name, application_id, applications(name, display_name), entitlements(name)").eq("tenant_id", tenantId).eq("approval_workflow_id", id).limit(500),
   ]);
   if (error || policyError) throw new ApiError(500, "QUERY_FAILED", (error ?? policyError)!.message);
   if (!data) return null;
@@ -100,7 +100,7 @@ export async function getApprovalWorkflow(
     summary: describeLevels(w.levels, names),
     policies: (policies ?? []).map((p) => {
       const app = p.applications as unknown as { name: string; display_name: string | null } | null;
-      return { id: p.id as string, name: p.name as string, applicationName: app ? (app.display_name ?? app.name) : null, entitlementName: (p.entitlements as unknown as { name: string } | null)?.name ?? null };
+      return { id: p.id as string, name: p.name as string, applicationId: (p.application_id as string | null) ?? null, applicationName: app ? (app.display_name ?? app.name) : null, entitlementName: (p.entitlements as unknown as { name: string } | null)?.name ?? null };
     }),
   };
 }

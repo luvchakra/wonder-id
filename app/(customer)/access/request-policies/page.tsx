@@ -153,30 +153,33 @@ export default async function RequestPoliciesPage({ searchParams }: { searchPara
       </Card>
 
       {canManage ? (
-        <Card>
-          <CardHeader title="Set a policy" description="Choose where it applies. Saving replaces the policy already set for that scope." />
-          <CardBody className="space-y-5">
-            <form method="get" className="flex flex-wrap items-end gap-2">
-              <div className="min-w-[14rem] flex-1">
-                <SelectField label="Scope" name="app" defaultValue={selectedApp?.id ?? ""}>
-                  <option value="">Organization default</option>
-                  {apps
-                    .slice()
-                    .sort((a, b) => (a.displayName ?? a.name).localeCompare(b.displayName ?? b.name))
-                    .map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.displayName ?? a.name}
-                      </option>
-                    ))}
-                </SelectField>
-              </div>
-              <Button type="submit" variant="secondary">
-                Choose
-              </Button>
-            </form>
-            <PolicyForm key={selectedApp?.id ?? "default"} applicationId={selectedApp?.id ?? null} entitlements={entitlements.map((e) => ({ id: e.id, name: e.name }))} defaults={defaults} workflows={workflows.filter((w) => w.status === "active").map((w) => ({ id: w.id, name: w.name }))} />
-          </CardBody>
-        </Card>
+        // #set-policy: approval workflow pages link straight here (owner test feedback item 16).
+        <div id="set-policy" className="scroll-mt-4">
+          <Card>
+            <CardHeader title="Set a policy" description="Choose where it applies. Saving replaces the policy already set for that scope." />
+            <CardBody className="space-y-5">
+              <form method="get" className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[14rem] flex-1">
+                  <SelectField label="Scope" name="app" defaultValue={selectedApp?.id ?? ""}>
+                    <option value="">Organization default</option>
+                    {apps
+                      .slice()
+                      .sort((a, b) => (a.displayName ?? a.name).localeCompare(b.displayName ?? b.name))
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.displayName ?? a.name}
+                        </option>
+                      ))}
+                  </SelectField>
+                </div>
+                <Button type="submit" variant="secondary">
+                  Choose
+                </Button>
+              </form>
+              <PolicyForm key={selectedApp?.id ?? "default"} applicationId={selectedApp?.id ?? null} entitlements={entitlements.map((e) => ({ id: e.id, name: e.name }))} defaults={defaults} workflows={workflows.filter((w) => w.status === "active").map((w) => ({ id: w.id, name: w.name }))} />
+            </CardBody>
+          </Card>
+        </div>
       ) : null}
     </div>
   );

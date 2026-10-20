@@ -696,6 +696,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 20 Oct 2026 | An approval workflow's page links to the next step: each request policy that uses it opens at its own form, an unused workflow links to setting a request policy, and a line under the levels links to where its approvers are set (managers, owners, groups, access managers). |
 | 20 Oct 2026 | Approval Workflows moved from the Access menu to Administration › Integrations, since setting them up is an administrator's job. |
 | 20 Oct 2026 | Organization Settings has a new Email (SMTP) page: the organization's notifications and invitations can be sent through its own mail server, with a test e-mail to check the settings. |
 | 20 Oct 2026 | My requests also lists the requests someone raised for you, marked "For you". The header shows your name in the organization when your account has no display name, instead of your email. |
