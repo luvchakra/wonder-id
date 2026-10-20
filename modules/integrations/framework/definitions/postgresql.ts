@@ -12,6 +12,7 @@ export const postgresql: ConnectorDefinition = {
     "Database logins (superusers and other powerful attributes flagged, expiry dates), group roles with the table privileges each carries, and which login holds which role. Reads only the system catalog, which every login can read, over verified TLS.",
   documentationUrl: "https://www.postgresql.org/docs/current/catalogs.html",
   driver: "sql",
+  sqlDialects: ["postgres"],
   settings: [
     { key: "url", label: "Database address", type: "url", required: true, help: "postgres://host:5432/database" },
     { key: "caCertificate", label: "CA certificate (PEM)", type: "string", help: "Only if the server's certificate is signed by a private CA" },

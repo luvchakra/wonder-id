@@ -15,6 +15,7 @@ import {
 } from "./types";
 import { safePattern, templateVariables } from "./mapping";
 import { MAX_SCRIPT_LENGTH, PARAMETER_NAME_RE, RESERVED_PARAMETERS, readOnlyScriptProblem } from "./powershellRules";
+import { SQL_DIALECTS, querySettingOf, sqlDialectOf, sqlQueryIssues } from "./sqlDialects";
 
 /**
  * Checks a connector definition before anything runs it. Built-in and
@@ -282,7 +283,7 @@ function checkResource(ctx: Ctx, def: Record<string, unknown>, kind: ResourceKin
       if (s.scope !== undefined && !["base", "one", "sub"].includes(String(s.scope))) issue(ctx, `${path}.search.scope`, "must be base, one or sub");
     }
   } else if (driver === "sql") {
-    checkSql(ctx, `${path}.query`, r.query);
+    checkSql(ctx, `${path}.query`, r.query, true);
   } else if (driver === "powershell") {
     checkPowerShell(ctx, `${path}.powershell`, r.powershell, parentAllowed, true);
     checkRecordsPath(ctx, `${path}.records`, r.records);
@@ -327,16 +328,15 @@ function checkResource(ctx: Ctx, def: Record<string, unknown>, kind: ResourceKin
   for (const req of canon.required) if (!(req in r.fields)) issue(ctx, `${path}.fields.${req}`, "is required");
 }
 
-function checkSql(ctx: Ctx, path: string, q: unknown) {
-  if (!str(q, 10_000)) return issue(ctx, path, "is required for the sql driver");
-  const body = q.trim().replace(/;\s*$/, "");
-  if (body.includes(";")) issue(ctx, path, "must be a single statement");
-  if (!/^(select|with)\b/i.test(body)) issue(ctx, path, "must be a SELECT (or WITH … SELECT) statement");
-  if (/\b(insert|update|delete|merge|truncate|drop|alter|create|grant|revoke|copy|call|do|set|reset|lock|vacuum|refresh|listen|notify)\b/i.test(body.replace(/'[^']*'/g, "''"))) {
-    issue(ctx, path, "may only read (no INSERT, UPDATE, DDL, COPY, SET or similar)");
+function checkSql(ctx: Ctx, path: string, q: unknown, fromSetting = false) {
+  // The custom-query connector: the statement is a string setting, checked when the connection is saved.
+  const setting = fromSetting && typeof q === "string" ? querySettingOf(q) : null;
+  if (setting) {
+    if (ctx.settings.get(setting) !== "string") issue(ctx, path, `"{settings.${setting}}" names no text setting`);
+    return;
   }
-  if (/\b(pg_read_file|pg_ls_dir|lo_import|lo_export|dblink|pg_sleep)\b/i.test(body)) issue(ctx, path, "uses a function that is not allowed");
-  checkTemplate(ctx, path, q, []);
+  for (const message of sqlQueryIssues(q)) issue(ctx, path, message);
+  if (typeof q === "string") checkTemplate(ctx, path, q, []);
 }
 
 /**
@@ -483,8 +483,14 @@ export function validateDefinition(input: unknown): { definition: ConnectorDefin
     });
   const urlSettings = [...ctx.settings].filter(([, t]) => t === "url").map(([k]) => k);
   if ((d.driver === "http" || d.driver === "mcp") && urlSettings.length === 0) issue(ctx, "settings", `an ${String(d.driver)} connector needs a url setting (the base address)`);
-  if ((d.driver === "ldap" || d.driver === "sql") && urlSettings.length === 0) issue(ctx, "settings", "needs a url setting (ldaps://host:636 or postgres://host:5432/db)");
+  if ((d.driver === "ldap" || d.driver === "sql") && urlSettings.length === 0) issue(ctx, "settings", "needs a url setting (ldaps://host:636, or a database address such as postgres://host:5432/db)");
   if (d.driver === "powershell" && urlSettings.length === 0) issue(ctx, "settings", "a powershell connector needs a url setting (the WinRM address, https://host:5986/wsman)");
+  if (d.sqlDialects !== undefined) {
+    if (d.driver !== "sql") issue(ctx, "sqlDialects", "is only for a sql connector");
+    else if (!Array.isArray(d.sqlDialects) || d.sqlDialects.length === 0 || d.sqlDialects.some((x) => !(String(x) in SQL_DIALECTS))) {
+      issue(ctx, "sqlDialects", `must list databases from ${Object.keys(SQL_DIALECTS).join(", ")}`);
+    }
+  }
 
   // Auth
   const auth = d.auth;
@@ -518,6 +524,14 @@ export function validateDefinition(input: unknown): { definition: ConnectorDefin
     for (const k of templated[String(auth.type)] ?? []) {
       if (!str(auth[k], 1000)) issue(ctx, `auth.${k}`, "is required");
       else checkTemplate(ctx, `auth.${k}`, auth[k] as string, ["secret", "settings"]);
+    }
+    if (auth.type === "sql_password") {
+      // An Oracle wallet (ewallet.pem) holds a private key: it comes only from secret fields.
+      for (const k of ["wallet", "walletPassword"] as const) {
+        if (auth[k] === undefined) continue;
+        if (!str(auth[k], 1000) || !/^\{secret\.[a-zA-Z0-9_]+\}$/.test(auth[k] as string)) issue(ctx, `auth.${k}`, "must be one secret field ({secret.…})");
+        else checkTemplate(ctx, `auth.${k}`, auth[k] as string, ["secret"]);
+      }
     }
     if (auth.type === "header" && typeof auth.name === "string" && /^(host|cookie)$/i.test(auth.name)) issue(ctx, "auth.name", "cannot be Host or Cookie");
     if (auth.type === "client_certificate") {
@@ -750,7 +764,7 @@ export function validateSettings(def: ConnectorDefinition, input: unknown): { se
       if (text.length > 20_000) issues.push({ path: `settings.${s.key}`, message: `${s.label} is too long` });
       if (s.type === "select" && !s.options?.includes(text)) issues.push({ path: `settings.${s.key}`, message: `${s.label} must be one of ${s.options?.join(", ")}` });
       if (s.type === "url") {
-        const scheme = def.driver === "ldap" ? "ldaps:" : def.driver === "sql" ? "postgres:" : "https:";
+        const scheme = def.driver === "ldap" ? "ldaps:" : "https:";
         let u: URL | null = null;
         try {
           u = new URL(text);
@@ -758,11 +772,27 @@ export function validateSettings(def: ConnectorDefinition, input: unknown): { se
           /* reported below */
         }
         const devHttp = (def.driver === "http" || def.driver === "mcp" || def.driver === "file" || def.driver === "powershell") && u?.protocol === "http:";
-        if (!u || (u.protocol !== scheme && !(devHttp && process.env.OUTBOUND_ALLOW_PRIVATE_NETWORKS === "true") && !(def.driver === "sql" && u.protocol === "postgresql:"))) {
+        if (def.driver === "sql") {
+          // The scheme picks the database; a definition written for some databases accepts only theirs.
+          const dialects = def.sqlDialects ?? (Object.keys(SQL_DIALECTS) as (keyof typeof SQL_DIALECTS)[]);
+          const dialect = sqlDialectOf(u);
+          if (!u || !dialect || !dialects.includes(dialect)) {
+            const examples = dialects.map((x) => `${SQL_DIALECTS[x].schemes[0]}//`).join(", ");
+            issues.push({ path: `settings.${s.key}`, message: `${s.label} must be a ${examples} address` });
+          } else if (u.username || u.password) issues.push({ path: `settings.${s.key}`, message: `${s.label} must not contain a user name or password` });
+        } else if (!u || (u.protocol !== scheme && !(devHttp && process.env.OUTBOUND_ALLOW_PRIVATE_NETWORKS === "true"))) {
           issues.push({ path: `settings.${s.key}`, message: `${s.label} must be a ${scheme}// address` });
         } else if (u.username || u.password) issues.push({ path: `settings.${s.key}`, message: `${s.label} must not contain a user name or password` });
       }
       settings[s.key] = s.type === "url" ? text.replace(/\/+$/, "") : text;
+    }
+  }
+  // The custom-query connector: each statement the organization entered is held to the definition rules.
+  if (def.driver === "sql") {
+    for (const spec of Object.values(def.resources).flat()) {
+      const key = querySettingOf(spec?.query);
+      const value = key ? settings[key] : undefined;
+      if (key && value !== undefined) for (const message of sqlQueryIssues(value)) issues.push({ path: `settings.${key}`, message: `${def.settings.find((s) => s.key === key)?.label ?? key} ${message}` });
     }
   }
   return { settings, issues };

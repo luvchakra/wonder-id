@@ -192,7 +192,11 @@ export function classifyOutboundError(err: unknown): { outcome: TrafficOutcome; 
   const code = (err as { code?: unknown })?.code;
   const name = err instanceof Error ? err.name : "";
   if (/timed? ?out/i.test(message) || code === "ETIMEDOUT") return { outcome: "error", category: "timeout" };
-  if (/InvalidCredentials/i.test(name) || (typeof code === "string" && /^28/.test(code))) return { outcome: "error", category: "auth" };
+  // A refused login: LDAP, PostgreSQL (28xxx), SQL Server (ELOGIN), MySQL, Oracle (ORA-01017).
+  const errorNum = (err as { errorNum?: unknown })?.errorNum;
+  if (/InvalidCredentials/i.test(name) || (typeof code === "string" && /^(28|ELOGIN$|ER_ACCESS_DENIED_ERROR$|ER_DBACCESS_DENIED_ERROR$)/.test(code)) || errorNum === 1017) {
+    return { outcome: "error", category: "auth" };
+  }
   if (typeof code === "string" && /^(ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH)$/.test(code)) return { outcome: "error", category: "network" };
   if (/certificate|self.signed|TLS/i.test(message)) return { outcome: "error", category: "tls" };
   return { outcome: "error", category: "error" };
