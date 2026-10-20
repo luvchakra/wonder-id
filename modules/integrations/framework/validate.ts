@@ -14,6 +14,7 @@ import {
   type ResourceKind,
 } from "./types";
 import { safePattern, templateVariables } from "./mapping";
+import { MAX_SCRIPT_LENGTH, PARAMETER_NAME_RE, RESERVED_PARAMETERS, readOnlyScriptProblem } from "./powershellRules";
 
 /**
  * Checks a connector definition before anything runs it. Built-in and
@@ -31,6 +32,9 @@ import { safePattern, templateVariables } from "./mapping";
  *   cross the network in clear text.
  * - SQL is one read-only SELECT/WITH statement (and runs in a read-only
  *   transaction too).
+ * - PowerShell runs over WinRM on https:// only; a read script may not use
+ *   commands that change something (powershellRules.ts), and its
+ *   parameters are data, never part of the script's text.
  */
 
 const KEY_RE = /^[a-z][a-z0-9-]{1,62}$/;
@@ -44,6 +48,7 @@ const AUTH_BY_DRIVER: Record<string, string[]> = {
   sql: ["sql_password"],
   mcp: ["none", "bearer", "header"],
   file: ["none", "bearer", "basic", "header"],
+  powershell: ["basic"],
   none: ["none"],
 };
 
@@ -278,6 +283,9 @@ function checkResource(ctx: Ctx, def: Record<string, unknown>, kind: ResourceKin
     }
   } else if (driver === "sql") {
     checkSql(ctx, `${path}.query`, r.query);
+  } else if (driver === "powershell") {
+    checkPowerShell(ctx, `${path}.powershell`, r.powershell, parentAllowed, true);
+    checkRecordsPath(ctx, `${path}.records`, r.records);
   } else if (driver === "mcp") {
     if (!isObj(r.rpc) || !MCP_METHODS.includes(String(r.rpc.method))) issue(ctx, `${path}.rpc.method`, `must be one of ${MCP_METHODS.join(", ")}`);
     checkRecordsPath(ctx, `${path}.records`, r.records);
@@ -329,6 +337,51 @@ function checkSql(ctx: Ctx, path: string, q: unknown) {
   }
   if (/\b(pg_read_file|pg_ls_dir|lo_import|lo_export|dblink|pg_sleep)\b/i.test(body)) issue(ctx, path, "uses a function that is not allowed");
   checkTemplate(ctx, path, q, []);
+}
+
+/**
+ * A PowerShell script and its parameters. Parameter values are texts
+ * (templates of `allowed`), numbers, true or false, or lists of texts.
+ * `readOnly` (reads and the test) refuses commands that change something.
+ */
+function checkPowerShell(ctx: Ctx, path: string, ps: unknown, allowed: Scope[], readOnly: boolean): string[] {
+  if (!isObj(ps)) {
+    issue(ctx, path, "is required for the powershell driver: { script, parameters?, depth? }");
+    return [];
+  }
+  for (const k of Object.keys(ps)) if (!["script", "parameters", "depth"].includes(k)) issue(ctx, `${path}.${k}`, "must be script, parameters or depth");
+  if (!str(ps.script, MAX_SCRIPT_LENGTH)) issue(ctx, `${path}.script`, `is required (at most ${MAX_SCRIPT_LENGTH} characters)`);
+  else {
+    // Values arrive as parameters; a template in the script itself would paste a value into code.
+    if (templateVariables(ps.script).length) issue(ctx, `${path}.script`, "may not use templates: pass values as parameters");
+    const problem = readOnly ? readOnlyScriptProblem(ps.script) : null;
+    if (problem) issue(ctx, `${path}.script`, problem);
+  }
+  if (ps.depth !== undefined && !(Number.isInteger(ps.depth) && (ps.depth as number) >= 1 && (ps.depth as number) <= 10)) issue(ctx, `${path}.depth`, "must be a whole number from 1 to 10");
+  const used: string[] = [];
+  if (ps.parameters !== undefined) {
+    if (!isObj(ps.parameters)) issue(ctx, `${path}.parameters`, "must be an object of parameter names and values");
+    else {
+      const entries = Object.entries(ps.parameters);
+      if (entries.length > 30) issue(ctx, `${path}.parameters`, "may have at most 30 parameters");
+      for (const [name, value] of entries) {
+        const p = `${path}.parameters.${name}`;
+        if (!PARAMETER_NAME_RE.test(name) || RESERVED_PARAMETERS.has(name.toLowerCase())) issue(ctx, p, "must be a parameter name (letters, digits or _), not Params, Args or Input");
+        const texts = typeof value === "string" ? [value] : Array.isArray(value) ? value : null;
+        if (texts) {
+          if (Array.isArray(value) && value.length > 100) issue(ctx, p, "a list may have at most 100 values");
+          for (const t of texts) {
+            if (typeof t !== "string" || t.length > 2000) issue(ctx, p, "a list must hold texts (at most 2000 characters each)");
+            else {
+              checkTemplate(ctx, p, t, allowed);
+              used.push(...templateVariables(t));
+            }
+          }
+        } else if (typeof value !== "boolean" && !(typeof value === "number" && Number.isFinite(value))) issue(ctx, p, "must be text, a number, true or false, or a list of texts");
+      }
+    }
+  }
+  return used;
 }
 
 const HEADER_RE = /^[a-zA-Z][a-zA-Z0-9-]{1,60}$/;
@@ -431,6 +484,7 @@ export function validateDefinition(input: unknown): { definition: ConnectorDefin
   const urlSettings = [...ctx.settings].filter(([, t]) => t === "url").map(([k]) => k);
   if ((d.driver === "http" || d.driver === "mcp") && urlSettings.length === 0) issue(ctx, "settings", `an ${String(d.driver)} connector needs a url setting (the base address)`);
   if ((d.driver === "ldap" || d.driver === "sql") && urlSettings.length === 0) issue(ctx, "settings", "needs a url setting (ldaps://host:636 or postgres://host:5432/db)");
+  if (d.driver === "powershell" && urlSettings.length === 0) issue(ctx, "settings", "a powershell connector needs a url setting (the WinRM address, https://host:5986/wsman)");
 
   // Auth
   const auth = d.auth;
@@ -531,6 +585,7 @@ export function validateDefinition(input: unknown): { definition: ConnectorDefin
   else if (d.driver === "ldap") {
     if (!isObj(d.test.search) || !str(d.test.search.base, 500) || !str(d.test.search.filter, 500)) issue(ctx, "test.search", "needs a base and filter");
   } else if (d.driver === "sql") checkSql(ctx, "test.query", d.test.query);
+  else if (d.driver === "powershell" && d.test.powershell !== undefined) checkPowerShell(ctx, "test.powershell", d.test.powershell, ["settings"], true);
 
   if (d.application !== undefined) {
     if (!str(d.application, 200)) issue(ctx, "application", "must be text");
@@ -621,7 +676,7 @@ function checkLdapWrite(ctx: Ctx, p: string, op: string, ldap: unknown) {
 
 function checkWrite(ctx: Ctx, write: unknown, driver: unknown) {
   if (!isObj(write)) return issue(ctx, "write", "must be an object");
-  if (driver !== "http" && driver !== "ldap") return issue(ctx, "write", "only an http or ldap connector can write");
+  if (driver !== "http" && driver !== "ldap" && driver !== "powershell") return issue(ctx, "write", "only an http, ldap or powershell connector can write");
   for (const [op, spec] of Object.entries(write)) {
     const p = `write.${op}`;
     if (!(DEFINITION_WRITE_OPERATIONS as readonly string[]).includes(op)) {
@@ -632,6 +687,22 @@ function checkWrite(ctx: Ctx, write: unknown, driver: unknown) {
       if (!isObj(spec) || spec.request !== undefined) issue(ctx, p, "an ldap connector writes with { ldap }, not { request }");
       else if (spec.repeatable !== undefined) issue(ctx, `${p}.repeatable`, "LDAP changes are always repeatable; leave it out");
       else checkLdapWrite(ctx, p, op, spec.ldap);
+      continue;
+    }
+    if (driver === "powershell") {
+      if (!isObj(spec) || spec.request !== undefined || spec.ldap !== undefined) {
+        issue(ctx, p, "a powershell connector writes with { powershell }");
+        continue;
+      }
+      if (spec.repeatable !== undefined && typeof spec.repeatable !== "boolean") issue(ctx, `${p}.repeatable`, "must be true or false");
+      const used = new Set(checkPowerShell(ctx, `${p}.powershell`, spec.powershell, ["settings", "target"], false));
+      // A change must name what it changes, or it would do the same thing for everyone.
+      if (op === "create_account") {
+        if (!used.has("target.email") && !used.has("target.username")) issue(ctx, `${p}.powershell.parameters`, "must pass {target.email} or {target.username}");
+        continue;
+      }
+      if (!used.has("target.account")) issue(ctx, `${p}.powershell.parameters`, "must pass {target.account}");
+      if ((op === "revoke_access" || op === "grant_access") && !used.has("target.entitlement")) issue(ctx, `${p}.powershell.parameters`, "must pass {target.entitlement}");
       continue;
     }
     if (!isObj(spec) || spec.ldap !== undefined || !isObj(spec.request)) {
@@ -686,7 +757,7 @@ export function validateSettings(def: ConnectorDefinition, input: unknown): { se
         } catch {
           /* reported below */
         }
-        const devHttp = (def.driver === "http" || def.driver === "mcp" || def.driver === "file") && u?.protocol === "http:";
+        const devHttp = (def.driver === "http" || def.driver === "mcp" || def.driver === "file" || def.driver === "powershell") && u?.protocol === "http:";
         if (!u || (u.protocol !== scheme && !(devHttp && process.env.OUTBOUND_ALLOW_PRIVATE_NETWORKS === "true") && !(def.driver === "sql" && u.protocol === "postgresql:"))) {
           issues.push({ path: `settings.${s.key}`, message: `${s.label} must be a ${scheme}// address` });
         } else if (u.username || u.password) issues.push({ path: `settings.${s.key}`, message: `${s.label} must not contain a user name or password` });

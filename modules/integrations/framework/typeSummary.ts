@@ -80,6 +80,7 @@ const PROTOCOL_LABEL: Record<ConnectorDriver, string> = {
   sql: "SQL (PostgreSQL, TLS)",
   mcp: "MCP (Streamable HTTP)",
   file: "CSV files (HTTPS or received)",
+  powershell: "PowerShell over WinRM (HTTPS)",
   none: "Receive only",
 };
 
@@ -179,6 +180,7 @@ export function paginationStyles(def: ConnectorDefinition): string[] {
   if (def.driver === "sql") return ["One query, row-limited"];
   if (def.driver === "mcp") return ["MCP nextCursor"];
   if (def.driver === "file") return ["One file per kind"];
+  if (def.driver === "powershell") return ["One script run per kind"];
   return [...new Set(all.map((r) => PAGINATION_LABEL[r.pagination?.type ?? "none"]))];
 }
 

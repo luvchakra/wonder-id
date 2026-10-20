@@ -8,6 +8,7 @@ import { gitea } from "./gitea";
 import { mattermost } from "./mattermost";
 import { nextcloud } from "./nextcloud";
 import { postgresql } from "./postgresql";
+import { windowsPowerShell } from "./windows-powershell";
 import { openbao } from "./openbao";
 import { kubernetes } from "./kubernetes";
 import { saviynt } from "./saviynt";
@@ -25,4 +26,4 @@ import { restApi } from "./rest-api";
  * generic: any organization running that product can use it by entering
  * its own address and credentials. definitions.test.ts validates every one.
  */
-export const BUILTIN_DEFINITIONS: ConnectorDefinition[] = [frappeHr, erpnext, ldapDirectory, activeDirectory, keycloak, gitea, mattermost, nextcloud, postgresql, openbao, kubernetes, saviynt, zendesk, scim, scimInbound, restApi, mcpServer, runtimeGateway, webhook, csvFile];
+export const BUILTIN_DEFINITIONS: ConnectorDefinition[] = [frappeHr, erpnext, ldapDirectory, activeDirectory, keycloak, gitea, mattermost, nextcloud, postgresql, windowsPowerShell, openbao, kubernetes, saviynt, zendesk, scim, scimInbound, restApi, mcpServer, runtimeGateway, webhook, csvFile];

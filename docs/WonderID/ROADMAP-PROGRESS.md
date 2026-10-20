@@ -4,7 +4,7 @@ What WonderID does today and what comes next, phase by phase. Built from the [kn
 
 ✅ done · 🔶 partly done · ⬜ not started · progress counts partly done as half
 
-**Overall: 66%** `███████░░░`
+**Overall: 67%** `███████░░░`
 
 | # | Phase | Progress |
 |---|---|---|
@@ -45,6 +45,7 @@ What WonderID does today and what comes next, phase by phase. Built from the [kn
 - ✅ Connector framework and gateway
 - ✅ Built-in connectors (HR, identity provider, LDAP, Active Directory, applications)
 - ✅ Generic REST API connector, configured in its settings
+- ✅ PowerShell connector (Windows servers over WinRM, scripts with any parameters)
 - ✅ CSV import and export
 - ✅ Accounts inventory: orphaned, dormant, privileged
 - ✅ Reconciliation of accounts, entitlements and grants

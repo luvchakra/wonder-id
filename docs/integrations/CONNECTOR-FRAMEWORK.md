@@ -226,6 +226,7 @@ owner's action.
 | `mattermost` | application | http | accounts and bots, teams, membership |
 | `nextcloud` | application | http | accounts, groups, membership |
 | `postgresql` | database | sql | logins, group roles with their table privileges, membership |
+| `windows-powershell` | infrastructure | powershell | a Windows server's local accounts, local groups (Administrators flagged admin), membership, over WinRM; **writes** (once turned on): disable an account, add and remove group members. Not yet certified against a real server with `live.test.ts` |
 | `openbao` | secrets | http | AppRoles, userpass logins, policies, assignments |
 | `kubernetes` | infrastructure | http | service accounts, Roles and ClusterRoles, bindings |
 | `saviynt` | identity provider | http | identities, accounts, endpoints, entitlements, assignments, security systems |
@@ -705,7 +706,7 @@ The same operations are available over the API (session authentication):
 | `key` | Stable id: lowercase letters, digits and dashes, 2–63 characters. The keys of built-in connectors are reserved. |
 | `version` | `major.minor.patch`. A published version never changes. |
 | `category` | `hr`, `identity_provider`, `directory`, `application`, `database`, `secrets`, `infrastructure` or `other` |
-| `driver` | `http` (REST/JSON), `ldap` (LDAPS), `sql` (PostgreSQL), `mcp` (an MCP server over Streamable HTTP), `file` (CSV files), or `none` (receives only) |
+| `driver` | `http` (REST/JSON), `ldap` (LDAPS), `sql` (PostgreSQL), `mcp` (an MCP server over Streamable HTTP), `file` (CSV files), `powershell` (PowerShell scripts on a Windows server over WinRM, see "The powershell driver"), or `none` (receives only) |
 | `settings` | Non-secret values the organization enters. `type` is `url`, `string`, `number`, `boolean` or `select` (with `options`). Each has an optional `default`. One `url` setting is the base address (`baseUrl` when present). |
 | `auth` | How to authenticate. Secret values are declared in `auth.fields` and referenced only as `{secret.<key>}`. |
 | `test` | A cheap authenticated call (`request`, `search`, `query` or `rpc`) that proves the connection works. A `none` or `file` connector has none (a file connection's test reads its addresses). |
@@ -720,7 +721,7 @@ The same operations are available over the API (session authentication):
 | Type | Driver | Fields |
 |---|---|---|
 | `none` | http, mcp, file, none | |
-| `basic` | http, file | `username`, `password` |
+| `basic` | http, file, powershell | `username`, `password` |
 | `bearer` | http, mcp, file | `token` (an optional token field sends no header when empty) |
 | `header` | http, mcp, file | `name` and `value`, for example `Authorization: token {secret.key}:{secret.secret}` |
 | `query` | http | `name` and `value` (avoid it where the API offers a header) |
@@ -765,6 +766,7 @@ Conventions the built-in connectors follow, so downstream modules can rely on th
 | `pagination` | http | See below |
 | `search` | ldap | `{ base, filter, scope?, attributes? }`. Paged automatically. Under `forEach`, template values are LDAP-escaped. |
 | `query` | sql | One `SELECT` or `WITH` statement, with no templates. It runs in a read-only transaction with a row limit. |
+| `powershell` | powershell | `{ script, parameters?, depth? }`: see "The powershell driver". `records` (optional) picks the list inside the script's one output object. |
 | `rpc` | mcp | `{ method }`: `initialize` (the server itself), `tools/list`, `resources/list` or `prompts/list`. Paged by `nextCursor`. Each tool gains `_operation`, `_operationBasis` and `_destructive` from the deterministic classification. |
 | `file` | file | `{ url?, columns?, delimiter? }`: `url` is `{settings.<url setting>}` (empty: read received files), `columns` is `{settings.<string setting>}` holding renames, `delimiter` is `,` (default), `;`, tab or `\|`. One resource per kind; no `forEach` or `unwind`. |
 | `forEach` | all | Runs the request once per record of another kind, which is available as `{parent.…}` (for example, a group's members). |
@@ -876,6 +878,9 @@ These hold for built-in and custom definitions alike:
   CA goes in a `caCertificate` setting; verification is never turned off.
 - SQL is a single read-only statement: no DML, no DDL, `COPY` or `SET`, and
   no file or sleep functions.
+- PowerShell runs over WinRM on `https://` only. A script holds no
+  templates (values are parameters), and a read or test script may not use a
+  command that changes something (see "The powershell driver").
 - A definition is at most 256 KB. One sync is capped at 10,000 requests,
   2,000 pages per resource and 50,000 records per resource.
 
@@ -888,6 +893,73 @@ A query parameter may be a list, which repeats it (`role[]=agent&role[]=admin`).
 A connection made from a built-in may store the definition's key and version
 instead of a copy (`{ definition: { key, version, origin: "builtin" } }`). The
 engine then uses exactly that version from code, and refuses a mismatch.
+
+### The powershell driver
+
+Runs a PowerShell script on the organization's Windows server over WinRM
+(WS-Management) and reads what it outputs. Code: `drivers/powershell.ts`,
+rules in `powershellRules.ts`.
+
+- **Connection.** The url setting is the WinRM address,
+  `https://server:5986/wsman`; the server needs an HTTPS listener with a
+  certificate WonderID can verify, and Basic authentication enabled for
+  WinRM. `auth` is `basic` (a local account of the server). An optional
+  `edition` select setting with the value `PowerShell 7` runs `pwsh.exe`;
+  otherwise Windows PowerShell 5.1 (`powershell.exe`). Every WinRM request
+  goes through the Connector Gateway (policies, allowed hosts, rate limit,
+  accounting as `powershell Create`, `powershell Receive`, …).
+- **A script** is `{ script, parameters?, depth? }`, in a resource
+  (`powershell`), the `test` (default `$PSVersionTable.PSVersion`) or a
+  write. At most 8,000 characters, and no `{…}` templates in the script.
+- **Parameters** (up to 30) are text (a template: `{settings.…}`,
+  `{parent.…}` under `forEach`, `{target.…}` in a write), numbers,
+  `true`/`false`, or lists of text. They travel as base64 JSON, never pasted
+  into the script, and reach it as named parameters (declare them with
+  `param(...)`) and as the `$Params` hashtable. `Params`, `Args` and
+  `Input` are reserved names.
+- **Answers.** Each output object is one record (`records` can pick a list
+  instead). Output is converted with `ConvertTo-Json` at `depth` levels
+  (default 4, at most 10); Windows PowerShell's `/Date(…)/` dates become ISO
+  8601. Enums arrive as numbers in 5.1, so cast them with `[string]`. Only the
+  result is read; anything else the script prints is ignored. An error the
+  script throws fails the run with its message; `ObjectNotFound` is a 404,
+  so an `optional` resource reads none. A run that returns no result reports
+  its exit code and the start of its error output. The encoded command must
+  fit the Windows command line (32,000 characters).
+- **Reads only read.** Read and test scripts are refused when they use a
+  command whose verb changes something (`Set-`, `Remove-`, `New-`, `Add-`,
+  `Disable-`, `Invoke-`, …, except `Import-Module`, `Import-Csv` and
+  output cmdlets), a built-in alias of one (`rm`, `iex`, …), the call
+  operator `&`, dot-sourcing, `Add-Type`, script blocks, ADSI `.Delete()`
+  and similar methods, file output, or `-WhatIf:$false`. They also run with
+  `$WhatIfPreference` on. This is a guard, not a sandbox: give the account
+  only the rights it reads with, unless changes are turned on.
+- **Writes** are `{ powershell, repeatable? }` under `write`. Their
+  parameters must pass `{target.account}` (and `{target.entitlement}` for
+  access), or `{target.email}`/`{target.username}` for `create_account`.
+  They run without -WhatIf; mark one `repeatable` only when running it twice
+  is harmless (catch "already a member" and "not a member", as the built-in
+  does).
+
+```json
+{
+  "driver": "powershell",
+  "settings": [{ "key": "url", "label": "WinRM address", "type": "url", "required": true },
+               { "key": "searchBase", "label": "Search base", "type": "string", "required": true }],
+  "auth": { "type": "basic", "username": "{secret.username}", "password": "{secret.password}",
+            "fields": [{ "key": "username", "label": "User" }, { "key": "password", "label": "Password" }] },
+  "test": {},
+  "resources": {
+    "account": {
+      "powershell": {
+        "script": "param($SearchBase, $Properties)\nImport-Module ActiveDirectory\nGet-ADUser -SearchBase $SearchBase -Filter * -Properties $Properties | Select-Object SamAccountName, Enabled, mail",
+        "parameters": { "SearchBase": "{settings.searchBase}", "Properties": ["mail"] }
+      },
+      "fields": { "externalId": "SamAccountName", "email": "mail" }
+    }
+  }
+}
+```
 
 ## Certifying a connector
 

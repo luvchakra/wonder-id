@@ -35,8 +35,9 @@ export type ConnectorCategory = (typeof CONNECTOR_CATEGORIES)[number];
 /**
  * `none`: a connector that only receives (events, webhooks, gateway calls) and reads nothing.
  * `file`: CSV files, fetched from an HTTPS address or sent to the connection's `file` receiver.
+ * `powershell`: PowerShell scripts run on a Windows server over WinRM (HTTPS), returning JSON.
  */
-export const CONNECTOR_DRIVERS = ["http", "ldap", "sql", "mcp", "file", "none"] as const;
+export const CONNECTOR_DRIVERS = ["http", "ldap", "sql", "mcp", "file", "powershell", "none"] as const;
 export type ConnectorDriver = (typeof CONNECTOR_DRIVERS)[number];
 
 /** The canonical object families a definition can produce (integration_objects.object_type). */
@@ -300,6 +301,23 @@ export type RecordFilter = {
   notPrefix?: string;
 };
 
+/** A value passed to a PowerShell script: text (a template), a number, true or false, or a list of texts. */
+export type PowerShellParameter = string | number | boolean | string[];
+
+/**
+ * powershell driver: one script, run on the connection's Windows server
+ * over WinRM. `parameters` reach the script as named parameters (declare
+ * them with `param(...)`) and as the `$Params` hashtable; they travel as
+ * data, never pasted into the script's text. What the script outputs is
+ * converted to JSON there (ConvertTo-Json, `depth` levels, default 4) and
+ * each output object is one record, or `records` picks the list.
+ */
+export type PowerShellSpec = {
+  script: string;
+  parameters?: Record<string, PowerShellParameter>;
+  depth?: number;
+};
+
 export type ChangesSpec = { request: HttpRequestSpec; records?: string | string[]; pagination?: Pagination };
 
 /** The cursor values a `changes` request may use. */
@@ -325,6 +343,8 @@ export type ResourceSpec = {
   search?: { base: string; filter: string; scope?: "base" | "one" | "sub"; attributes?: string[] };
   /** sql driver: one read-only statement. */
   query?: string;
+  /** powershell driver: the script whose output objects are the records. */
+  powershell?: PowerShellSpec;
   /** mcp driver: a JSON-RPC list method (tools/list, resources/list) or initialize. Paged by nextCursor. */
   rpc?: { method: "initialize" | "tools/list" | "resources/list" | "prompts/list" };
   /**
@@ -403,7 +423,11 @@ export type LdapWriteSpec = {
  * timeout, a 5xx) sent again without reading the system first. LDAP
  * changes are always repeatable: "already there" counts as done.
  */
-export type WriteSpec = { request: HttpRequestSpec; repeatable?: boolean; ldap?: never } | { ldap: LdapWriteSpec; request?: never; repeatable?: never };
+export type WriteSpec =
+  | { request: HttpRequestSpec; repeatable?: boolean; ldap?: never; powershell?: never }
+  | { ldap: LdapWriteSpec; request?: never; repeatable?: never; powershell?: never }
+  /** A PowerShell script (powershell driver); a failure it reports (an error it throws) fails the change. */
+  | { powershell: PowerShellSpec; repeatable?: boolean; request?: never; ldap?: never };
 
 export type FileSourceSpec = {
   /** `{settings.<url setting>}`: the HTTPS address of the CSV. Empty means "read uploaded files". */
@@ -433,7 +457,7 @@ export type ConnectorDefinition = {
   settings: SettingField[];
   auth: AuthSpec;
   /** A cheap authenticated call proving the connection works (none for a receive-only connector). */
-  test?: { request?: HttpRequestSpec; search?: ResourceSpec["search"]; query?: string; rpc?: ResourceSpec["rpc"] };
+  test?: { request?: HttpRequestSpec; search?: ResourceSpec["search"]; query?: string; rpc?: ResourceSpec["rpc"]; powershell?: PowerShellSpec };
   /** The application name recorded on accounts and entitlements ("{settings.realm}" allowed). */
   application?: string;
   /** One request per kind, or several whose records are combined (groups and roles). */

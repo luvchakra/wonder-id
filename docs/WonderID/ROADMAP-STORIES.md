@@ -12,7 +12,7 @@ Every story counts equally here, so the many finished product-base stories weigh
 
 ## Completed recently
 
-- ✅ **INTEGRATION-P0-32** Generic REST API connection type (fix-list item 19, owner request 2026-10-20): any REST/JSON API configured in the connection's settings, all sign-in styles, paging, mappings and changes · this change
+- ✅ **INTEGRATION-P0-32** Generic REST API connection type (fix-list item 19, owner request 2026-10-20): any REST/JSON API configured in the connection's settings, all sign-in styles, paging, mappings and changes · [#264](https://github.com/luvchakra/wonder-agent/pull/264)
 - ✅ **ACCESS-P0-21** Business and IT roles · [#246](https://github.com/luvchakra/wonder-agent/pull/246)
 - ✅ **COMPLIANCE-P0-10** Certification campaigns for every identity type · [#245](https://github.com/luvchakra/wonder-agent/pull/245)
 - ✅ **ACCESS-P0-23** Delegations · [#242](https://github.com/luvchakra/wonder-agent/pull/242)

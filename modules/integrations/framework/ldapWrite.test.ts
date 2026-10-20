@@ -53,7 +53,7 @@ describe("LDAP changes (INTEGRATION-P0-22)", () => {
     expect(msgs(withWrite({ grant_access: { ldap: { dn: "{target.entitlement}", add: { objectClass: ["top"] } } } }))).toMatch(/only create_account adds an entry/);
     expect(msgs(withWrite({ create_account: { ldap: { dn: "uid={target.username},{settings.baseDn}", add: { uid: ["{target.username}"] } } } }))).toMatch(/objectClass/);
     expect(msgs(withWrite({ revoke_access: { ldap: { dn: "{target.entitlement}", modify: [{ operation: "delete", attribute: "member", values: ["{secret.password}"] }] } } }))).toMatch(/secret/);
-    expect(msgs({ ...(withWrite({}) as object), driver: "sql" })).toMatch(/only an http or ldap connector can write/);
+    expect(msgs({ ...(withWrite({}) as object), driver: "sql" })).toMatch(/only an http, ldap or powershell connector can write/);
   });
 
   it("the connector sends a declared LDAP change to the driver, filled for the target", async () => {
