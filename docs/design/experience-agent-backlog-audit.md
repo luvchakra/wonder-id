@@ -4416,14 +4416,22 @@ articles) and knowledge base updated. Verified: `npx vitest run modules/ui`
 (16 files, 126 tests passed) and eslint on the changed files; typecheck clean apart from the known
 missing-asset image errors of `app/welcome`.
 
-## 2026-10-20 — Approval workflow pages point to Request Policies (owner test feedback item 16)
+## 2026-10-20 — Approval workflow pages point to where things are set (owner test feedback item 16)
 
-Owner request: give admins small contextual nudges, for example a direct
-link to the policy page from an approval workflow. A workflow does nothing
-until a request policy chooses it, so the workflow pages now link there:
-the "Used by" empty state on a workflow's page carries "Go to Request
-Policies", the card header links to Request Policies once policies use it,
-and the list page's one-line description links "request policy". No new
-controls on forms; copy unchanged apart from the links (§19.5). Verified:
-eslint on `app/(customer)/access/approval-workflows/`; typecheck clean apart
-from the known missing-asset image errors of `app/welcome`.
+Owner request: give admins small contextual nudges, such as a direct link
+to the policy page, choosing each link from the page's context. On a
+workflow's page:
+- each policy under "Used by" links to its own form on Request Policies
+  (`?app=<application>#set-policy`, or the organization default);
+- with no policy yet, the empty state links to "Set a request policy"
+  (active workflows only);
+- under the levels, one line says where the approvers come from, built
+  from the approver kinds the levels use: managers (Workforce), owners
+  (Application Catalog), groups (Groups), access managers (Users).
+
+The workflow list's description links "request policy". Request Policies'
+"Set a policy" card gained the `set-policy` anchor; `getApprovalWorkflow`
+now returns each policy's `applicationId` (Access module, one more column,
+no new query). No new form controls (§19.5). Verified: eslint on the
+changed files, `npx vitest run modules/access-governance`, typecheck clean
+apart from the known missing-asset image errors of `app/welcome`.
