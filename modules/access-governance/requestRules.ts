@@ -263,3 +263,25 @@ export function entitlementRequestability(policy: RequestPolicy | null, entitlem
   if (!entitlementRequestable) return { requestable: false, reason: "entitlement" };
   return { requestable: true, reason: null };
 }
+
+/**
+ * The request policy form's one "Approval" choice (owner test feedback item
+ * 17, 2026-10-20): an approval workflow, or a built-in route with its
+ * order. `workflow:<id>`, `manager_approval`, `owner_approval`,
+ * `manager_and_owner:sequential` or `manager_and_owner:parallel`.
+ */
+export function approvalChoiceOf(p: Pick<RequestPolicy, "approval" | "approvalMode" | "approvalWorkflowId">): string {
+  if (p.approvalWorkflowId) return `workflow:${p.approvalWorkflowId}`;
+  return p.approval === "manager_and_owner" ? `manager_and_owner:${p.approvalMode}` : p.approval;
+}
+
+/**
+ * The policy fields an "Approval" choice sets. A workflow keeps the stored
+ * route (it applies again if the workflow is cleared); validatePolicyInput
+ * checks every value.
+ */
+export function parseApprovalChoice(choice: string): { approvalWorkflowId: string; approval?: string; approvalMode?: string } {
+  if (choice.startsWith("workflow:")) return { approvalWorkflowId: choice.slice("workflow:".length) };
+  const [approval, approvalMode] = choice.split(":");
+  return approvalMode ? { approvalWorkflowId: "", approval, approvalMode } : { approvalWorkflowId: "", approval };
+}

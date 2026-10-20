@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/requirePermission";
-import { listApplicationsForMatching, listApprovalWorkflows, listEntitlementsForApplication, listGovernanceChanges, listRequestPolicies } from "@/modules/access-governance/service";
+import { approvalChoiceOf, listApplicationsForMatching, listApprovalWorkflows, listEntitlementsForApplication, listGovernanceChanges, listRequestPolicies } from "@/modules/access-governance/service";
 import { listTenantMembersWithRoles } from "@/lib/rbac/roles";
 import { ApiError } from "@/lib/shared/types/foundation";
-import { Badge, Button, Card, CardBody, CardHeader, EmptyState, SelectField, TableContainer, Td, Th, Thead, Tr, ObjectActionsMenu } from "@/modules/ui";
+import { Badge, Card, CardBody, CardHeader, EmptyState, TableContainer, Td, Th, Thead, Tr, ObjectActionsMenu } from "@/modules/ui";
 import { objectActionsFor } from "@/modules/operations/exportRegistry";
 import { PolicyForm } from "./PolicyForm";
 import { ChangeDecision } from "./ChangeDecision";
+import { ScopePicker } from "./ScopePicker";
 
 // ACCESS-P0-18 — request policies (spec §11.4): who may request what, for
 // whom, for how long, with what justification, and when a person must
@@ -43,7 +44,7 @@ export default async function RequestPoliciesPage({ searchParams }: { searchPara
   const selectedApp = apps.find((a) => a.id === sp.app) ?? null;
   const entitlements = selectedApp ? await listEntitlementsForApplication(tenantId, selectedApp.id) : [];
   const existing = policies.find((p) => (selectedApp ? p.applicationId === selectedApp.id && !p.entitlementId : !p.applicationId));
-  const defaults = existing ?? {
+  const base = existing ?? {
     name: selectedApp ? `${selectedApp.displayName ?? selectedApp.name} requests` : "Organization default",
     requestable: true,
     allowSelf: true,
@@ -53,12 +54,14 @@ export default async function RequestPoliciesPage({ searchParams }: { searchPara
     justificationRequired: true,
     riskThreshold: "high",
     autoApprove: false,
-    approval: "manager_approval",
-    approvalMode: "sequential",
+    approval: "manager_approval" as const,
+    approvalMode: "sequential" as const,
     approvalTimeoutDays: 5,
     onTimeout: "escalate",
     status: "active",
+    approvalWorkflowId: null,
   };
+  const defaults = { ...base, approvalChoice: approvalChoiceOf(base) };
 
   return (
     <div className="space-y-5">
@@ -119,7 +122,13 @@ export default async function RequestPoliciesPage({ searchParams }: { searchPara
               {policies.map((p) => (
                 <Tr key={p.id}>
                   <Td>
-                    <span className="font-medium text-foreground">{p.name}</span>
+                    {canManage ? (
+                      <Link href={p.applicationId ? `/access/request-policies?app=${p.applicationId}#set-policy` : "/access/request-policies#set-policy"} className="font-medium text-primary hover:underline">
+                        {p.name}
+                      </Link>
+                    ) : (
+                      <span className="font-medium text-foreground">{p.name}</span>
+                    )}
                     <span className="mt-0.5 flex flex-wrap gap-1">
                       {!p.requestable ? <Badge tone="neutral">Not requestable</Badge> : null}
                       {p.autoApprove ? <Badge tone="info">Auto-approves below {p.riskThreshold}</Badge> : null}
@@ -156,26 +165,15 @@ export default async function RequestPoliciesPage({ searchParams }: { searchPara
         // #set-policy: approval workflow pages link straight here (owner test feedback item 16).
         <div id="set-policy" className="scroll-mt-4">
           <Card>
-            <CardHeader title="Set a policy" description="Choose where it applies. Saving replaces the policy already set for that scope." />
+            <CardHeader title="Set a policy" description="Choose where it applies; its current policy opens. Saving replaces it." />
             <CardBody className="space-y-5">
-              <form method="get" className="flex flex-wrap items-end gap-2">
-                <div className="min-w-[14rem] flex-1">
-                  <SelectField label="Scope" name="app" defaultValue={selectedApp?.id ?? ""}>
-                    <option value="">Organization default</option>
-                    {apps
-                      .slice()
-                      .sort((a, b) => (a.displayName ?? a.name).localeCompare(b.displayName ?? b.name))
-                      .map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.displayName ?? a.name}
-                        </option>
-                      ))}
-                  </SelectField>
-                </div>
-                <Button type="submit" variant="secondary">
-                  Choose
-                </Button>
-              </form>
+              <ScopePicker
+              value={selectedApp?.id ?? ""}
+              options={apps
+                .slice()
+                .sort((a, b) => (a.displayName ?? a.name).localeCompare(b.displayName ?? b.name))
+                .map((a) => ({ id: a.id, name: a.displayName ?? a.name }))}
+            />
               <PolicyForm key={selectedApp?.id ?? "default"} applicationId={selectedApp?.id ?? null} entitlements={entitlements.map((e) => ({ id: e.id, name: e.name }))} defaults={defaults} workflows={workflows.filter((w) => w.status === "active").map((w) => ({ id: w.id, name: w.name }))} />
             </CardBody>
           </Card>

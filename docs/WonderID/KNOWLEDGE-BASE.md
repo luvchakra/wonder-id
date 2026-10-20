@@ -319,6 +319,7 @@ An AI assistant can **propose** an onboarding configuration; a person always rev
   - how long access may last;
   - whether a reason is required.
 - Nobody can approve a request they made, or one that is for them.
+- **Setting a policy:** choose the scope (the organization default or an application) and its current policy opens. The form has three parts: who can request; approval (Approved by is one of your approval workflows or a built-in route: manager, owner, manager then owner, or both at once); and how long access lasts. The workflow's page links back to each policy that uses it.
 - **Approval workflows:** an approval pattern defined once and used by the policies of as many applications as follow it (Administration → Integrations → Approval Workflows → Actions → New workflow…).
   - A workflow has up to six levels, run in order. Each level names up to five approvers: the manager, the manager's manager, the owner of what is requested, the application owner, a named person, a group (any one member approves) or access managers.
   - A level is decided by all its approvers, or by any one of them; once one approves, the others are no longer asked.
@@ -696,6 +697,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 20 Oct 2026 | Request Policies is simpler: choosing a scope opens its policy straight away, and the form has three parts (who can request, approval, how long access lasts). One "Approved by" choice lists your approval workflows and the built-in routes, replacing three separate fields. Each policy's name opens its form. |
 | 20 Oct 2026 | An approval workflow's page links to the next step: each request policy that uses it opens at its own form, an unused workflow links to setting a request policy, and a line under the levels links to where its approvers are set (managers, owners, groups, access managers). |
 | 20 Oct 2026 | Approval Workflows moved from the Access menu to Administration › Integrations, since setting them up is an administrator's job. |
 | 20 Oct 2026 | Organization Settings has a new Email (SMTP) page: the organization's notifications and invitations can be sent through its own mail server, with a test e-mail to check the settings. |
