@@ -130,6 +130,8 @@ export const ADMIN_AREA: ShellNavItem = {
         page("Sync Jobs", "/integrations/jobs", "integration.read"),
         page("Connector Gateway", "/integrations/gateway", "integration.read"),
         page("MCP Servers", "/integrations/mcp", "integration.read"),
+        // An admin activity (owner test feedback item 15, 2026-10-20): moved here from Access.
+        page("Approval Workflows", "/access/approval-workflows", "access.manage"),
       ],
       "Link2",
     ),
@@ -179,7 +181,6 @@ export const SHELL_NAV: ShellNavItem[] = [
       link("Access Packages", "/access/packages", "Box", "access.read"),
       link("Entitlements", "/access/entitlements", "KeyRound", "access.read"),
       link("Request Policies", "/access/request-policies", "Scale", "access.manage"),
-      link("Approval Workflows", "/access/approval-workflows", "Workflow", "access.manage"),
     ],
   },
   {
