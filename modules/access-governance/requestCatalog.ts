@@ -599,6 +599,8 @@ export async function listRequests(
   tenantId: string,
   filter: {
     mineUserId?: string;
+    /** With mineUserId: also the requests for this identity, the caller's own (owner feedback, 20 Oct: a request someone raised for you is yours too). */
+    mineIdentityId?: string | null;
     status?: string;
     page?: number;
     pageSize?: number;
@@ -610,7 +612,14 @@ export async function listRequests(
   const page = Math.max(filter.page ?? 1, 1);
   const supabase = await supabaseServer();
   let query = supabase.from("access_requests").select("*, applications(name, display_name), entitlements(name), access_packages(name)", { count: "exact" }).eq("tenant_id", tenantId);
-  if (filter.mineUserId) query = query.eq("requested_by", filter.mineUserId);
+  if (filter.mineUserId) {
+    // Raised by them, on their behalf, or for them.
+    const user = UUID_RE.test(filter.mineUserId) ? filter.mineUserId : null;
+    const identity = filter.mineIdentityId && UUID_RE.test(filter.mineIdentityId) ? filter.mineIdentityId : null;
+    const mine = [user && `requested_by.eq.${user}`, user && `requested_on_behalf_of.eq.${user}`, identity && `subject_identity_id.eq.${identity}`].filter(Boolean);
+    if (!mine.length) return { rows: [], total: 0 };
+    query = query.or(mine.join(","));
+  }
   if (filter.status) query = query.eq("status", filter.status);
   if (filter.awaiting) {
     const ids = filter.awaiting.ids.filter((id) => UUID_RE.test(id));

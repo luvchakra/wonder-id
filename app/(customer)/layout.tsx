@@ -16,6 +16,7 @@ import { AccountPanel } from "@/modules/ui/AccountPanel";
 import { ShellGlobalSearch, ShellNotifications } from "@/modules/ui/ShellSearchAndNotifications";
 import { AnnouncementsBanner } from "@/modules/ui/AnnouncementsBanner";
 import { getActiveAnnouncements } from "@/modules/platform-admin/service";
+import { getIdentityForUser } from "@/modules/agent-identity/service";
 import { NAV_COOKIE, SHELL_NAV, navFor, type ShellBadgeCounts } from "@/modules/ui/shell-nav";
 import pkg from "@/package.json";
 import { brandTitle, wonderIdBrand } from "@/modules/ui/brand";
@@ -83,7 +84,7 @@ export default async function CustomerLayout({ children }: { children: React.Rea
     redirect(host.target.kind === "subdomain" || host.target.kind === "invalid" ? "/no-access" : "/onboarding/start");
   }
 
-  const [profile, memberships, isAdmin, announcements, openFindings, cookieStore, openAccessFindings, environments] = await Promise.all([
+  const [profile, memberships, isAdmin, announcements, openFindings, cookieStore, openAccessFindings, environments, identity] = await Promise.all([
     profileRead,
     // Already resolved by getTenantContext() above — the cache hands back
     // the same promise, so this costs nothing.
@@ -109,6 +110,8 @@ export default async function CustomerLayout({ children }: { children: React.Rea
     countOpenAccessFindings(ctx.tenantId),
     // Owner request 2026-10-13: each organization's environment, for its colour.
     environmentsRead,
+    // Owner feedback (20 Oct): a person without a display name is shown by their name in this organization, not their email.
+    getIdentityForUser(ctx.tenantId, user.id).catch(() => null),
   ]);
 
   // FOUNDATION-P0-22 — each organization's own address, so the rail always shows where you are.
@@ -128,7 +131,7 @@ export default async function CustomerLayout({ children }: { children: React.Rea
   const main = await mainAppUrl();
   const sidebarUser = {
     email: user.email ?? "",
-    displayName: profile?.displayName ?? null,
+    displayName: profile?.displayName || identity?.displayName || null,
     roleLabel: ctx.roles[0] ? roleLabel(ctx.roles[0]) : null,
     isPlatformAdmin: isAdmin,
   };
