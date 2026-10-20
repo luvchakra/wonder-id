@@ -697,6 +697,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 20 Oct 2026 | An application's page has two new tabs: Policies (the request policies that apply to it and who approves under each, with a link to change them) and Audit History (the latest changes to the application, its entitlements and entitlement types). |
 | 20 Oct 2026 | The Email (SMTP) page has a Provider list (GoDaddy, Gmail, Microsoft 365, Outlook.com, SendGrid, Mailgun, Zoho Mail and others) that fills in the server, security and port. |
 | 20 Oct 2026 | Request Policies is simpler: choosing a scope opens its policy straight away, and the form has three parts (who can request, approval, how long access lasts). One "Approved by" choice lists your approval workflows and the built-in routes, replacing three separate fields. Each policy's name opens its form. |
 | 20 Oct 2026 | Entitlements and Onboard Application moved to Administration › Applications, and Request Policies to Administration › Policies & Controls, since configuring them is an administrator's job. Their pages and who can open them are unchanged. |

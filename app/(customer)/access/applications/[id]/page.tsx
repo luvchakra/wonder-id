@@ -12,6 +12,7 @@ import {
   listEntitlementsForApplication,
   listEntitlementTypes,
   listFulfilmentAssignments,
+  listApprovalWorkflows,
   listRequestPolicies,
   entitlementRequestability,
   resolveRequestPolicy,
@@ -23,8 +24,9 @@ import { EntitlementsPanel } from "./EntitlementsPanel";
 import { OnboardingPanel } from "./onboarding/OnboardingPanel";
 import { listAccountableHumans } from "@/modules/agent-identity/service";
 import { getIntegration } from "@/modules/integrations/service";
+import { listObjectActivity } from "@/modules/operations/service";
 import { ApiError } from "@/lib/shared/types/foundation";
-import { RecordProvenance, Badge, Card, CardBody, CardHeader, KpiCard, LinkButton, Tabs, TabPanel } from "@/modules/ui";
+import { RecordProvenance, Badge, Card, CardBody, CardHeader, EmptyState, KpiCard, LinkButton, Tabs, TabPanel } from "@/modules/ui";
 import { ApplicationForm } from "../ApplicationForm";
 import { APP_TYPE_LABEL, LEVEL_TONE, ONBOARDING_LABEL } from "../labels";
 import { LifecycleForm } from "./onboarding/OnboardingForms";
@@ -63,7 +65,7 @@ export default async function ApplicationDetailPage({ params, searchParams }: { 
   const app = await getApplicationDetail(tenantId, id);
   if (!app) notFound();
   const canManage = ctx.permissions.includes("access.manage");
-  const [entitlements, people, integration, onboarding, accountSummary, runs, provenance, accessRuns, entitlementTypes, assignments, groups, requestPolicies] = await Promise.all([
+  const [entitlements, people, integration, onboarding, accountSummary, runs, provenance, accessRuns, entitlementTypes, assignments, groups, requestPolicies, workflows] = await Promise.all([
     listEntitlementsForApplication(tenantId, id),
     canManage ? listAccountableHumans(tenantId) : Promise.resolve([]),
     app.sourceIntegrationId && ctx.permissions.includes("integration.read") ? getIntegration(tenantId, app.sourceIntegrationId) : Promise.resolve(null),
@@ -80,7 +82,18 @@ export default async function ApplicationDetailPage({ params, searchParams }: { 
     canManage ? listGroups(tenantId).catch(() => []) : Promise.resolve([]),
     // Owner feedback 2026-10-14: "Requestable" here means what the request catalog means.
     listRequestPolicies(tenantId).catch(() => []),
+    // Owner test feedback item 18 (2026-10-20): the Policies tab names each policy's workflow.
+    listApprovalWorkflows(tenantId).catch(() => []),
   ]);
+  const canReadAudit = ctx.permissions.includes("audit.read");
+  // The application, its entitlements and its entitlement types (Audit History tab, streamed).
+  const auditIds = [id, ...entitlements.map((e) => e.id), ...entitlementTypes.map((t) => t.id)].slice(0, 300);
+  const workflowName = new Map(workflows.map((w) => [w.id, w.name]));
+  const appPolicies = requestPolicies.filter((p) => p.applicationId === id);
+  const orgDefault = requestPolicies.find((p) => !p.applicationId) ?? null;
+  // Without its own whole-application policy, the organization default applies.
+  const shownPolicies = [...appPolicies.sort((a, b) => Number(Boolean(a.entitlementId)) - Number(Boolean(b.entitlementId))), ...(appPolicies.some((p) => !p.entitlementId) || !orgDefault ? [] : [orgDefault])];
+  const policyFormHref = `/access/request-policies?app=${id}#set-policy`;
   const requestability = Object.fromEntries(
     entitlements.map((e) => [e.id, entitlementRequestability(resolveRequestPolicy(requestPolicies, id, e.id), e.requestable !== false && e.status !== "inactive").reason]),
   );
@@ -100,6 +113,8 @@ export default async function ApplicationDetailPage({ params, searchParams }: { 
     },
     { value: "onboarding", label: "Onboarding" },
     { value: "accounts", label: "Accounts", count: accountSummary.total },
+    { value: "policies", label: "Policies", count: appPolicies.length },
+    ...(canReadAudit ? [{ value: "audit", label: "Audit History" }] : []),
     ...(canManage ? [{ value: "settings", label: "Settings" }] : []),
   ];
 
@@ -275,6 +290,56 @@ export default async function ApplicationDetailPage({ params, searchParams }: { 
             </CardBody>
           </Card>
         </TabPanel>
+        <TabPanel value="policies" className="space-y-4 pt-4">
+          <Card>
+            <CardHeader
+              title="Request policies"
+              description="Who may request this application's access, who approves it and for how long. An entitlement's policy wins over the application's."
+              actions={
+                canManage ? (
+                  <Link href={policyFormHref} className="text-sm text-primary hover:underline">
+                    {appPolicies.some((p) => !p.entitlementId) ? "Change policy" : "Set a policy"}
+                  </Link>
+                ) : undefined
+              }
+            />
+            <CardBody>
+              {shownPolicies.length === 0 ? (
+                <EmptyState title="No request policy applies" description="Nothing in this application can be requested until a policy covers it." />
+              ) : (
+                <ul className="divide-y divide-border text-sm" data-testid="application-policies">
+                  {shownPolicies.map((p) => (
+                    <li key={p.id} className="flex flex-wrap items-start justify-between gap-3 py-2">
+                      <span className="min-w-0">
+                        <span className="font-medium text-foreground">{p.name}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {p.entitlementId ? `Only ${p.entitlementName ?? "one entitlement"}` : p.applicationId ? "The whole application" : "Organization default (this application has no policy of its own)"}
+                          {" · Approved by "}
+                          {p.approvalWorkflowId ? (
+                            <Link href={`/access/approval-workflows/${p.approvalWorkflowId}`} className="text-primary hover:underline">
+                              {workflowName.get(p.approvalWorkflowId) ?? "an approval workflow"}
+                            </Link>
+                          ) : (
+                            APPROVAL_LABEL[p.approval === "manager_and_owner" ? `manager_and_owner:${p.approvalMode}` : p.approval]
+                          )}
+                          {p.maxDurationDays ? ` · up to ${p.maxDurationDays} days` : ""}
+                        </span>
+                      </span>
+                      <Badge tone={p.status === "active" ? "success" : "neutral"}>{p.status === "active" ? "Active" : "Inactive"}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+        </TabPanel>
+        {canReadAudit ? (
+          <TabPanel value="audit" className="pt-4">
+            <Suspense fallback={<p className="text-sm text-muted-foreground">Loading audit history…</p>}>
+              <AuditHistory tenantId={tenantId} objectIds={auditIds} />
+            </Suspense>
+          </TabPanel>
+        ) : null}
         {canManage ? (
           <TabPanel value="settings" className="space-y-4 pt-4">
             <Card>
@@ -297,6 +362,46 @@ export default async function ApplicationDetailPage({ params, searchParams }: { 
     </div>
   );
 }
+
+/** The latest changes to the application and its entitlements (a history panel, so streamed, §15.1 rule 8). */
+async function AuditHistory({ tenantId, objectIds }: { tenantId: string; objectIds: string[] }) {
+  const activity = await listObjectActivity(tenantId, objectIds, 50);
+  return (
+    <>
+      {activity.length === 0 ? (
+        <EmptyState title="No changes recorded" description="Changes to this application, its entitlements and its entitlement types appear here." />
+      ) : (
+        <ol className="divide-y divide-border rounded-lg border border-border" data-testid="application-audit">
+          {activity.map((a) => (
+            <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm">
+              <span className="min-w-0">
+                <span className="font-mono text-xs text-foreground">{a.action}</span>
+                <span className="text-xs text-muted-foreground"> · {a.actorType === "user" ? "by a person" : `by the ${a.actorType}`}</span>
+              </span>
+              <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                {a.outcome === "failure" ? <Badge tone="danger">Failed</Badge> : null}
+                {a.createdAt.slice(0, 16).replace("T", " ")}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <p className="mt-2 text-xs text-muted-foreground">
+        The latest 50.{" "}
+        <Link href="/audit" className="text-primary hover:underline">
+          Full audit log
+        </Link>
+      </p>
+    </>
+  );
+}
+
+const APPROVAL_LABEL: Record<string, string> = {
+  manager_approval: "the manager",
+  owner_approval: "the owner",
+  "manager_and_owner:sequential": "the manager, then the owner",
+  "manager_and_owner:parallel": "the manager and the owner",
+};
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", {
