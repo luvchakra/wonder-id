@@ -7,15 +7,23 @@
  * reviewer takes the item. Nobody is asked to certify their own access.
  */
 
-export const REVIEWER_KINDS = ["named", "manager", "application_owner"] as const;
+export const REVIEWER_KINDS = ["named", "manager", "application_owner", "entitlement_owner"] as const;
 export type ReviewerKind = (typeof REVIEWER_KINDS)[number];
 
 export function resolveReviewer(
   kind: ReviewerKind,
-  people: { subjectUserId: string | null; managerUserId: string | null; applicationOwnerUserId: string | null },
+  people: { subjectUserId: string | null; managerUserId: string | null; applicationOwnerUserId: string | null; entitlementOwnerUserId?: string | null },
   namedReviewerId: string,
 ): { reviewerId: string; fallback: boolean } {
-  const chosen = kind === "manager" ? people.managerUserId : kind === "application_owner" ? people.applicationOwnerUserId : namedReviewerId;
+  // COMPLIANCE-P0-15: an entitlement without an owner who can sign in goes to its application's owner.
+  const chosen =
+    kind === "manager"
+      ? people.managerUserId
+      : kind === "application_owner"
+        ? people.applicationOwnerUserId
+        : kind === "entitlement_owner"
+          ? (people.entitlementOwnerUserId ?? people.applicationOwnerUserId)
+          : namedReviewerId;
   if (chosen && chosen !== people.subjectUserId) return { reviewerId: chosen, fallback: false };
   return { reviewerId: namedReviewerId, fallback: kind !== "named" };
 }

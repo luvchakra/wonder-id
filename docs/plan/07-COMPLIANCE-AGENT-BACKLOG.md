@@ -34,6 +34,8 @@ for every row is in `docs/design/compliance-agent-backlog-audit.md`.
 | COMPLIANCE-P0-11 | Access certification of WonderID users' role assignments | Done — 2026-10-14 (0183): scope `role_assignments`, direct and group, privileged first or privileged only; manager or named reviewer, never one's own (409 `SELF_CERTIFICATION`); revoke through Foundation's `removeRole` / `removeGroupMember`; audit `compliance.access_certified` / `compliance.access_revoked`; isolation 5/5; E2E `role-reviews.spec.ts` |
 | COMPLIANCE-P0-12 | Privacy programme: GDPR / UK GDPR / DPDP / CCPA rights requests, consent, RoPA, retention, legal holds, breach register (2026-10-01 user request) | Done — 2026-10-01 (`0103`, `modules/privacy`, `/settings/privacy`, `/my-privacy`, `/api/v1/privacy/*`, daily `/api/cron/privacy`; 12 rule tests; live isolation proof 28/28) |
 | COMPLIANCE-P0-13 | Financial and privacy control frameworks (SOX ITGC, SOC 1, PCI DSS, GLBA, DORA, RBI, SEBI CSCRF, CERT-In, GDPR, DPDP) | Done — 2026-10-01 (`0105`, 10 frameworks / 55 controls; shown on `/audit/integrity`) |
+| COMPLIANCE-P0-14 | Campaign templates, preview, closed-loop revocation and consultation | Done — 2026-10-14 (0185; detail in the audit log, parts 1 to 3) |
+| COMPLIANCE-P0-15 | Certification campaign types: user manager, entitlement owner, application owner, role-based, event-based, micro-certification | Done — 2026-10-20 (0209): Create Campaigns starts from a type; reviewer routing by type; business-role membership items (revoke ends the assignment); event-based templates launch on a person's move, manager change, conversion or rehire |
 
 ---
 
@@ -526,6 +528,23 @@ These stories extend this module's own tables, services and routes.
 ### COMPLIANCE-P0-10 — Certification campaigns for every identity type
 
 Extend campaigns to human, external, privileged, machine, service-account and AI-agent access and to application, entitlement, role and package owners; reviewer types (manager, application/entitlement/role owner, security, delegated); decisions CERTIFY/REVOKE/DEFER/ESCALATE/EXCEPTION; revoke creates remediation; templates, calendar and analytics. Recommendations stay advisory.
+
+### COMPLIANCE-P0-15 — Certification campaign types (owner request, 2026-10-20)
+
+Six ready-made campaign designs, chosen when creating a campaign and kept
+on a saved template:
+
+- **User manager**: managers certify their direct reports' accounts,
+  entitlements and business roles.
+- **Entitlement owner**: the entitlement's owner certifies everyone who
+  holds it.
+- **Application owner**: the application's business owner (else its
+  technical owner) certifies every account, entitlement and role on it.
+- **Role-based**: a business role's owner certifies everyone assigned to it;
+  revoke ends the assignment.
+- **Event-based**: starts by itself when a person moves, changes manager,
+  converts or is rehired; their manager reviews what they hold.
+- **Micro-certification**: one person and one entitlement, on demand.
 
 ## Tenant & user permissioning — Phase 4b (2026-09-26)
 

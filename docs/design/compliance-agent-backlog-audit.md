@@ -1631,3 +1631,69 @@ the Access changes (part of the 464 above).
 The owner asked for the app to be faster. This module's part, with numbers,
 verification and what was left out, is in `docs/design/qa-agent-backlog-audit.md`
 (2026-10-19). The rules that came out of it are CLAUDE.md §15.1.
+
+## 2026-10-20 — COMPLIANCE-P0-15: certification campaign types
+
+Owner request: design and create certification campaign type templates
+(user manager, entitlement owner, application owner, role-based,
+event-based, micro-certification).
+
+**Design.** A type is a ready-made design over the existing campaign
+engine, not a new engine: `campaignTypes.ts` (pure, used by the form and
+the server action) turns a type and its target into a scope, a reviewer
+kind and a cadence the launch already validates. Decisions, snapshots,
+escalation, evidence export and revocation closure are unchanged.
+
+| Type | Scope | Who reviews |
+|---|---|---|
+| User manager | people's access + business roles (`includeRoles`) | each person's manager |
+| Entitlement owner | people's access, one entitlement | the entitlement's owner, else the application's owner |
+| Application owner | people's access + roles, one application | business owner, else technical owner |
+| Role-based | `role_membership`, one business role (package) | the role's owner |
+| Event-based | one person's access + roles, per lifecycle event | the person's (new) manager |
+| Micro | one person, one entitlement | manager, entitlement owner or the fallback reviewer |
+
+In every type the fallback reviewer takes what nobody else can (no
+manager or owner who can sign in, or the person themself); nobody
+certifies their own access.
+
+**What changed.**
+- Migration `0209_compliance_campaign_types.sql` (applied to the project
+  database; additive): templates gain `campaign_type` and `trigger_events`;
+  reviewer kind `entitlement_owner`; scope `role_membership`;
+  `certification_items.package_assignment_id`; campaigns record
+  `template_id` and `trigger_event_id`, unique per template and event.
+- New item kind: a person's business-role assignment. Certify keeps it;
+  revoke ends it through Access's `revokeAssignment` (its access becomes
+  removal work) before the decision is recorded; no exception (the
+  assignment has its own end date). With `includeRoles`, access that comes
+  from a package is reviewed as the role, not grant by grant.
+- Event-based: `launchCampaignsForLifecycleEvent()` is called by Identity's
+  lifecycle service after a mover, manager change, conversion or rehire
+  event. It runs as the system (service role, pinned to the event's
+  tenant), skips a person with nothing to review, never throws (failures
+  audited as `compliance.template_triggered`), and the unique index stops a
+  replayed event starting a second campaign. Event templates cannot be
+  launched by hand; their one action is "Turn off".
+- Create Campaigns: the launch dialog starts from the type (one radio
+  card each, one line of copy); each type asks only for its target
+  (application, role, entitlement search, person search then their access)
+  and the fallback reviewer is now a member list, not a typed id. "Custom"
+  keeps the previous form. Days to review is on the form (default 30; 7
+  for event and micro).
+- `GET /api/v1/compliance/campaign-targets` (compliance.manage): the form's
+  choices, read through Access, Identity and Foundation services.
+- Revocation closure report: a role assignment ended in a review shows as
+  `role_assignment_ended`.
+
+**Verified.** `npm run typecheck` clean (apart from the PNG module types
+`next build` generates); eslint clean on changed files; vitest
+`modules/certification-compliance`, `modules/access-governance`,
+`modules/operations`, `humanLifecycle.test.ts`, `tests/architecture`: all
+pass, including new `campaignTypes.test.ts` (10), `eventCampaigns.test.ts`
+(4), `membershipDecision.test.ts` (4) and extended template and reviewer
+rule tests; `next build` passed.
+
+**Left out.** No scheduler for periodic templates (unchanged); IT roles
+(WonderID roles) stay under the custom "WonderID roles" scope; accounts
+with no entitlement are not separate items.

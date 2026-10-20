@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedTransitions, detectLifecycleEvents, endDatePassed, opensAccessRemoval, opensBirthright, ruleGrantRefusal, statusForState, tasksForEvent, whyCannotDisableAll } from "./humanLifecycle";
+import { allowedTransitions, detectLifecycleEvents, endDatePassed, opensAccessRemoval, opensBirthright, opensEventReview, ruleGrantRefusal, statusForState, tasksForEvent, whyCannotDisableAll } from "./humanLifecycle";
 
 describe("human lifecycle transitions", () => {
   it("allows the governed path and rehire, never skipping to terminated from active", () => {
@@ -89,6 +89,15 @@ describe("opensBirthright (owner decision, 13 October 2026)", () => {
     expect(opensBirthright({ eventType: "joiner", toState: "PRE_JOIN" })).toBe(false);
     expect(opensBirthright({ eventType: "mover", toState: "LEAVE_PENDING" })).toBe(false);
     expect(opensBirthright({ eventType: "leaver", toState: "LEAVE_PENDING" })).toBe(false);
+  });
+});
+
+describe("opensEventReview (COMPLIANCE-P0-15)", () => {
+  it("starts an event-based review for a working person who moved, changed manager, converted or returned", () => {
+    for (const eventType of ["mover", "manager_change", "conversion", "rehire"] as const) expect(opensEventReview({ eventType, toState: "ACTIVE" })).toBe(true);
+    expect(opensEventReview({ eventType: "leaver", toState: "LEAVE_PENDING" })).toBe(false);
+    expect(opensEventReview({ eventType: "joiner", toState: "ACTIVE" })).toBe(false);
+    expect(opensEventReview({ eventType: "mover", toState: "TERMINATED" })).toBe(false);
   });
 });
 

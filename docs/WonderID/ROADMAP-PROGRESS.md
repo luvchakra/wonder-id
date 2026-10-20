@@ -95,6 +95,7 @@ What WonderID does today and what comes next, phase by phase. Built from the [kn
 - ✅ Investigations
 - ✅ Rogue accounts
 - ✅ Access review campaigns
+- ✅ Campaign types (user manager, entitlement owner, application owner, role-based, event-based, micro-certification)
 - ✅ Separation of duties (process)
 - ✅ Control frameworks and evidence
 - ✅ Privacy (GDPR, DPDP)

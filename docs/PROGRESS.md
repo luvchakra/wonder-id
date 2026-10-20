@@ -14,7 +14,7 @@ Generated 2026-10-20 from 11 module backlogs.
 
 ## Overall
 
-**242 of 279 tracked stories complete — 87%**
+**244 of 281 tracked stories complete — 87%**
 
 ```
 ███████████████████████████████████░░░░░  87%
@@ -22,11 +22,11 @@ Generated 2026-10-20 from 11 module backlogs.
 
 | Status | Stories |
 |---|---|
-| Done | 242 |
+| Done | 244 |
 | Partial | 22 |
 | Deferred | 2 |
 | Not Started | 13 |
-| **Total tracked** | **279** |
+| **Total tracked** | **281** |
 
 Beyond these, the backlogs list **53 P1** and **32 P2** forward-looking items.
 Those are prose scope bullets rather than tracked stories, so they carry no status
@@ -44,7 +44,7 @@ and are deliberately excluded from the counts above.
 | 04 | [Access Agent](plan/04-ACCESS-AGENT-BACKLOG.md) | 32 | 1 | 0 | 0 | 33 | `█████████████████░` 97% |
 | 05 | [Runtime Agent](plan/05-RUNTIME-AGENT-BACKLOG.md) | 13 | 0 | 0 | 0 | 13 | `██████████████████` 100% |
 | 06 | [Risk Agent](plan/06-RISK-AGENT-BACKLOG.md) | 14 | 2 | 0 | 0 | 16 | `████████████████░░` 88% |
-| 07 | [Compliance Agent](plan/07-COMPLIANCE-AGENT-BACKLOG.md) | 17 | 0 | 0 | 0 | 17 | `██████████████████` 100% |
+| 07 | [Compliance Agent](plan/07-COMPLIANCE-AGENT-BACKLOG.md) | 19 | 0 | 0 | 0 | 19 | `██████████████████` 100% |
 | 08 | [Experience Agent](plan/08-EXPERIENCE-AGENT-BACKLOG.md) | 28 | 3 | 0 | 6 | 37 | `██████████████░░░░` 76% |
 | 09 | [Platform Agent](plan/09-PLATFORM-AGENT-BACKLOG.md) | 14 | 2 | 1 | 1 | 18 | `██████████████░░░░` 78% |
 | 10 | [Operations Agent](plan/10-OPERATIONS-AGENT-BACKLOG.md) | 11 | 1 | 0 | 2 | 14 | `██████████████░░░░` 79% |
@@ -274,7 +274,7 @@ and are deliberately excluded from the counts above.
 
 **Module:** Certification, Controls & Compliance  
 **Backlog status:** DORMANT — do not start until the user says "Run Compliance Agent"  
-**Stories:** 17 done · 0 partial · 0 deferred · 0 not started (17 tracked) · 4 P1 / 3 P2 ahead
+**Stories:** 19 done · 0 partial · 0 deferred · 0 not started (19 tracked) · 4 P1 / 3 P2 ahead
 
 | Story | Title | Status |
 |---|---|---|
@@ -295,6 +295,8 @@ and are deliberately excluded from the counts above.
 | COMPLIANCE-P0-11 | Access certification of WonderID users' role assignments | Done — 2026-10-14 (0183): scope `role_assignments`, direct and group, privileged first or privileged only; manager or named reviewer, never one's own (409 `SELF_CERTIFICATION`); revoke through Foundation's `removeRole` / `removeGroupMember`; audit `compliance.access_certified` / `compliance.access_revoked`; isolation 5/5; E2E `role-reviews.spec.ts` |
 | COMPLIANCE-P0-12 | Privacy programme: GDPR / UK GDPR / DPDP / CCPA rights requests, consent, RoPA, retention, legal holds, breach register (2026-10-01 user request) | Done — 2026-10-01 (`0103`, `modules/privacy`, `/settings/privacy`, `/my-privacy`, `/api/v1/privacy/*`, daily `/api/cron/privacy`; 12 rule tests; live isolation proof 28/28) |
 | COMPLIANCE-P0-13 | Financial and privacy control frameworks (SOX ITGC, SOC 1, PCI DSS, GLBA, DORA, RBI, SEBI CSCRF, CERT-In, GDPR, DPDP) | Done — 2026-10-01 (`0105`, 10 frameworks / 55 controls; shown on `/audit/integrity`) |
+| COMPLIANCE-P0-14 | Campaign templates, preview, closed-loop revocation and consultation | Done — 2026-10-14 (0185; detail in the audit log, parts 1 to 3) |
+| COMPLIANCE-P0-15 | Certification campaign types: user manager, entitlement owner, application owner, role-based, event-based, micro-certification | Done — 2026-10-20 (0209): Create Campaigns starts from a type; reviewer routing by type; business-role membership items (revoke ends the assignment); event-based templates launch on a person's move, manager change, conversion or rehire |
 
 ### 08 — Experience Agent
 

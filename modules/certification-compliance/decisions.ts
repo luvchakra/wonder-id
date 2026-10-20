@@ -5,7 +5,7 @@ import { writeAudit } from "@/lib/audit/writeAudit";
 import { removeRole, setRoleAssignmentEnd } from "@/lib/rbac/roles";
 import { removeGroupMember } from "@/lib/users/groups";
 import { ApiError } from "@/lib/shared/types/foundation";
-import { revokeAccessGrant, getAccessGrant, getEntitlement, createAccessRequest, recordApprovedAfterwards, requestCertifiedRemoval, removePackageResource, updateEntitlement } from "@/modules/access-governance/service";
+import { revokeAccessGrant, getAccessGrant, getEntitlement, createAccessRequest, recordApprovedAfterwards, requestCertifiedRemoval, removePackageResource, revokeAssignment, updateEntitlement } from "@/modules/access-governance/service";
 import { getIdentityReviewInfo, listOwners } from "@/modules/agent-identity/service";
 import { escalationTarget, IDENTITY_ITEM_DECISIONS, selfCertificationRefused, validateUntil } from "./identityReviewRules";
 import type { CertificationDecision, CertificationItem, CertificationItemDetail, DecisionType } from "@/lib/shared/types/compliance";
@@ -100,6 +100,8 @@ export async function recordDecision(
     ({ snapshot, remediationId } = await catalogItemDecision(tenantId, actorId, item, input));
   } else if (item.roleSource) {
     ({ snapshot, remediationId } = await roleItemDecision(tenantId, actorId, item, input));
+  } else if (item.packageAssignmentId) {
+    ({ snapshot, remediationId } = await membershipItemDecision(tenantId, actorId, item, input));
   } else if (item.identityId) {
     ({ snapshot, remediationId } = await identityItemDecision(tenantId, actorId, item, input));
   } else {
@@ -390,6 +392,39 @@ async function packageItemDecision(tenantId: string, actorId: string, item: Cert
   }
   const snapshot = { ...(item.snapshot as Record<string, unknown> | null), decidedAt: new Date().toISOString(), package: pkg ?? null };
   return { snapshot, remediationId: null };
+}
+
+/**
+ * COMPLIANCE-P0-15: a person's assignment to a business role (an access
+ * package). Nobody certifies their own. Certify keeps it; a revoke ends the
+ * assignment through Access's package service (its fulfilled access becomes
+ * removal work), before the decision is recorded, so a refused end records
+ * nothing. No exception: the assignment has its own end date in Access.
+ */
+async function membershipItemDecision(tenantId: string, actorId: string, item: CertificationItem, input: RecordDecisionInput): Promise<{ snapshot: unknown; remediationId: string | null }> {
+  if (!(PACKAGE_ITEM_DECISIONS as readonly string[]).includes(input.decision)) {
+    throw new ApiError(400, "INVALID_INPUT", "For a role assignment: approve, revoke, defer, escalate, delegate or request_information");
+  }
+  const subject = (await getIdentityReviewInfo(tenantId, [item.identityId!])).get(item.identityId!) ?? null;
+  if (selfCertificationRefused(input.decision, actorId, subject?.userId ?? null)) {
+    await writeAudit({ tenantId, actorId, actorType: "user", action: "compliance.sod_conflict_blocked", objectType: "certification_item", objectId: item.id, outcome: "failure", metadata: { reason: "self-certification" } });
+    throw new ApiError(409, "SELF_CERTIFICATION", "Nobody certifies their own access");
+  }
+  if (input.decision === "revoke") await revokeAssignment(tenantId, actorId, item.packageAssignmentId!, `Revoked in an access review: ${input.justification}`);
+  if (input.decision === "approve" || input.decision === "revoke") {
+    await writeAudit({
+      tenantId,
+      actorId,
+      actorType: "user",
+      action: input.decision === "approve" ? "compliance.access_certified" : "compliance.access_revoked",
+      objectType: "certification_item",
+      objectId: item.id,
+      outcome: "success",
+      metadata: { identityId: item.identityId, packageId: item.packageId, assignmentId: item.packageAssignmentId, campaignId: item.campaignId },
+    });
+  }
+  const snapshot = { ...(item.snapshot as Record<string, unknown> | null), decidedAt: new Date().toISOString(), subject: subject ? { displayName: subject.displayName, identityType: subject.identityType } : null };
+  return { snapshot, remediationId: input.decision === "revoke" ? item.packageAssignmentId : null };
 }
 
 /**

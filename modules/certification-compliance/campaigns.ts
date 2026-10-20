@@ -8,7 +8,7 @@ import { writeAudit } from "@/lib/audit/writeAudit";
 import { ApiError } from "@/lib/shared/types/foundation";
 import { DEFAULT_LIST_LIMIT } from "@/lib/shared/pagination";
 import { getAgentContract, listAgents } from "@/modules/agent-identity/service";
-import { getEffectiveAccess, listPolicyEvaluations, getApplication, getEntitlement, listIdentityGrantsForReview, listPackagesForReview, listApplicationsForReview } from "@/modules/access-governance/service";
+import { getEffectiveAccess, listPolicyEvaluations, getApplication, getEntitlement, listIdentityGrantsForReview, listPackageAssignmentsForReview, listPackagesForReview, listApplicationsForReview } from "@/modules/access-governance/service";
 import { getHumanIdentityIdsForUsers, getIdentityReviewInfo } from "@/modules/agent-identity/service";
 import { listRoleAssignmentsForReview } from "@/lib/rbac/roleAssignmentReview";
 import { REVIEWER_KINDS, resolveReviewer, type ReviewerKind } from "./identityReviewRules";
@@ -163,23 +163,48 @@ async function scopeTargets(tenantId: string, input: LaunchCampaignInput, ids: {
  * to the identity's manager, the application's owner or the named
  * reviewer, never to the person whose access it is, and keeps a snapshot
  * of what the reviewer is shown.
+ *
+ * COMPLIANCE-P0-15 (campaign types): optionally one entitlement or one
+ * person; the entitlement's owner may review; the application's technical
+ * owner stands in for a missing business owner; and with
+ * `scope.includeRoles` the people's business-role assignments are reviewed
+ * too, in place of the access those roles give (one decision per role).
  */
 async function buildIdentityItems(tenantId: string, campaignId: string, input: LaunchCampaignInput, applicationId: string | null): Promise<ItemRow[]> {
-  const grants = await listIdentityGrantsForReview(tenantId, { applicationId, privilegedOnly: input.scope?.privilegedOnly === true });
-  const ids = [...new Set(grants.flatMap((g) => [g.identityId, g.applicationOwnerIdentityId].filter((x): x is string => Boolean(x))))];
+  const scopeId = (k: string) => (typeof input.scope?.[k] === "string" && input.scope[k] ? (input.scope[k] as string) : null);
+  const includeRoles = input.scope?.includeRoles === true;
+  const identityId = scopeId("identityId");
+  const [grants, memberships] = await Promise.all([
+    listIdentityGrantsForReview(tenantId, { applicationId, entitlementId: scopeId("entitlementId"), identityId, privilegedOnly: input.scope?.privilegedOnly === true, excludePackageGrants: includeRoles }),
+    includeRoles && input.scope?.privilegedOnly !== true ? listPackageAssignmentsForReview(tenantId, { identityId, applicationId }) : Promise.resolve([]),
+  ]);
+  const ids = [
+    ...new Set(
+      [
+        ...grants.flatMap((g) => [g.identityId, g.applicationOwnerIdentityId, g.applicationTechnicalOwnerIdentityId, g.entitlementOwnerIdentityId]),
+        ...memberships.flatMap((m) => [m.identityId, m.ownerIdentityId]),
+      ].filter((x): x is string => Boolean(x)),
+    ),
+  ];
   const info = await getIdentityReviewInfo(tenantId, ids);
   const managers = await getIdentityReviewInfo(tenantId, [...new Set([...info.values()].map((p) => p.managerIdentityId).filter((x): x is string => Boolean(x)))]);
+  const userOf = (id: string | null) => (id ? (info.get(id)?.userId ?? null) : null);
+  const managerOf = (person: { managerIdentityId: string | null } | undefined) => {
+    const managerId = person?.managerIdentityId ?? null;
+    return managerId ? (managers.get(managerId)?.userId ?? info.get(managerId)?.userId ?? null) : null;
+  };
   const kind = input.reviewerKind ?? "named";
   const now = new Date().toISOString();
-  const rows = grants.map((g) => {
+  const rows: ItemRow[] = grants.map((g) => {
     const person = info.get(g.identityId);
-    const managerId = person?.managerIdentityId ?? null;
     const reviewer = resolveReviewer(
       kind,
       {
         subjectUserId: person?.userId ?? null,
-        managerUserId: managerId ? (managers.get(managerId)?.userId ?? info.get(managerId)?.userId ?? null) : null,
-        applicationOwnerUserId: g.applicationOwnerIdentityId ? (info.get(g.applicationOwnerIdentityId)?.userId ?? null) : null,
+        managerUserId: managerOf(person),
+        // The primary (business) owner, else the secondary (technical) one.
+        applicationOwnerUserId: userOf(g.applicationOwnerIdentityId) ?? userOf(g.applicationTechnicalOwnerIdentityId),
+        entitlementOwnerUserId: userOf(g.entitlementOwnerIdentityId),
       },
       input.reviewerId,
     );
@@ -209,7 +234,73 @@ async function buildIdentityItems(tenantId: string, campaignId: string, input: L
       },
     };
   });
+  // A role a person holds goes to the reviewer this campaign's kind names; an
+  // application's owner reviews the roles that include their application.
+  for (const m of memberships) {
+    const person = info.get(m.identityId);
+    const reviewer = resolveReviewer(kind === "entitlement_owner" ? "named" : kind, { subjectUserId: person?.userId ?? null, managerUserId: managerOf(person), applicationOwnerUserId: userOf(m.ownerIdentityId) }, input.reviewerId);
+    rows.push(membershipRow(tenantId, campaignId, input, m, person, reviewer, kind, now));
+  }
   return rows;
+}
+
+type Membership = Awaited<ReturnType<typeof listPackageAssignmentsForReview>>[number];
+
+/** COMPLIANCE-P0-15: one item for a person's assignment to a business role. */
+function membershipRow(
+  tenantId: string,
+  campaignId: string,
+  input: LaunchCampaignInput,
+  m: Membership,
+  person: { displayName: string; identityType: string } | undefined,
+  reviewer: { reviewerId: string; fallback: boolean },
+  kind: string,
+  now: string,
+): ItemRow {
+  return {
+    tenant_id: tenantId,
+    campaign_id: campaignId,
+    identity_id: m.identityId,
+    package_id: m.packageId,
+    package_assignment_id: m.assignmentId,
+    reviewer_id: reviewer.reviewerId,
+    risk_at_review: null,
+    usage_at_review: "unknown",
+    recommendation: "keep",
+    due_date: input.dueDate ?? null,
+    snapshot: {
+      capturedAt: now,
+      agentContractId: null,
+      agentContractVersion: null,
+      accessGrant: null,
+      policyEvaluations: [],
+      riskAtReview: null,
+      usageAtReview: "unknown",
+      person: { id: m.identityId, displayName: person?.displayName ?? "Unknown identity", identityType: person?.identityType ?? "HUMAN" },
+      membership: { assignmentId: m.assignmentId, package: { id: m.packageId, ref: m.packageRef, name: m.packageName, birthright: m.birthright }, source: m.source, expiresAt: m.expiresAt, resources: m.resources },
+      privilegeLevel: "standard",
+      reviewer: { kind, fallback: reviewer.fallback },
+    },
+  };
+}
+
+/**
+ * COMPLIANCE-P0-15 (role-based campaign): one item per person assigned to a
+ * business role (an access package), reviewed by the role's owner, or the
+ * named reviewer when it has no owner who can sign in, or the owner is the
+ * person. Certify keeps the assignment; revoke ends it through Access.
+ */
+async function buildMembershipItems(tenantId: string, campaignId: string, input: LaunchCampaignInput): Promise<ItemRow[]> {
+  const packageId = typeof input.scope?.packageId === "string" ? input.scope.packageId : null;
+  const memberships = await listPackageAssignmentsForReview(tenantId, { packageId });
+  const info = await getIdentityReviewInfo(tenantId, [...new Set(memberships.flatMap((m) => [m.identityId, m.ownerIdentityId]).filter((x): x is string => Boolean(x)))]);
+  const now = new Date().toISOString();
+  return memberships.map((m) => {
+    const person = info.get(m.identityId);
+    const ownerUserId = m.ownerIdentityId ? (info.get(m.ownerIdentityId)?.userId ?? null) : null;
+    const reviewer = resolveReviewer("application_owner", { subjectUserId: person?.userId ?? null, managerUserId: null, applicationOwnerUserId: ownerUserId }, input.reviewerId);
+    return membershipRow(tenantId, campaignId, input, m, person, reviewer, "role_owner", now);
+  });
 }
 
 /**
@@ -383,6 +474,7 @@ async function buildItems(tenantId: string, campaignId: string, input: LaunchCam
   if (input.scopeType === "role_assignments") return buildRoleItems(tenantId, campaignId, input);
   if (input.scopeType === "package_contents") return buildPackageItems(tenantId, campaignId, input);
   if (input.scopeType === "application_contents") return buildApplicationItems(tenantId, campaignId, input, ids.applicationId);
+  if (input.scopeType === "role_membership") return buildMembershipItems(tenantId, campaignId, input);
   const { agents, grantFilter } = await scopeTargets(tenantId, input, ids);
   return buildAgentItems(tenantId, campaignId, agents, input, grantFilter);
 }
@@ -399,7 +491,14 @@ function buildErrorText(err: unknown): string {
  * never works from a half-built campaign. Service role for the status and
  * clean-up, pinned to the tenant (§14). Audited either way (#11).
  */
-async function buildCampaign(tenantId: string, actorId: string, campaignId: string, input: LaunchCampaignInput, ids: { applicationId: string | null; entitlementId: string | null }): Promise<void> {
+async function buildCampaign(
+  tenantId: string,
+  actorId: string,
+  campaignId: string,
+  input: LaunchCampaignInput,
+  ids: { applicationId: string | null; entitlementId: string | null },
+  actorType: "user" | "system" = "user",
+): Promise<void> {
   const svc = supabaseServiceRole();
   try {
     const total = await insertItems(await buildItems(tenantId, campaignId, input, ids));
@@ -410,11 +509,11 @@ async function buildCampaign(tenantId: string, actorId: string, campaignId: stri
       .eq("id", campaignId)
       .eq("build_status", "building");
     if (error) throw new ApiError(500, "UPDATE_FAILED", error.message);
-    await writeAudit({ tenantId, actorId, actorType: "user", action: "compliance.campaign_built", objectType: "certification_campaign", objectId: campaignId, outcome: "success", metadata: { items: total } });
+    await writeAudit({ tenantId, actorId, actorType, action: "compliance.campaign_built", objectType: "certification_campaign", objectId: campaignId, outcome: "success", metadata: { items: total } });
   } catch (err) {
     const message = buildErrorText(err);
     await failCampaignBuild(tenantId, campaignId, message);
-    await writeAudit({ tenantId, actorId, actorType: "user", action: "compliance.campaign_built", objectType: "certification_campaign", objectId: campaignId, outcome: "failure", metadata: { error: message } });
+    await writeAudit({ tenantId, actorId, actorType, action: "compliance.campaign_built", objectType: "certification_campaign", objectId: campaignId, outcome: "failure", metadata: { error: message } });
   }
 }
 
@@ -455,7 +554,18 @@ async function resolveLaunchScope(tenantId: string, input: LaunchCampaignInput):
     // COMPLIANCE-P0-10: optionally one application; reviewer kind from a closed list.
     applicationId = typeof input.scope?.applicationId === "string" && input.scope.applicationId ? input.scope.applicationId : null;
     if (applicationId && !(await getApplication(tenantId, applicationId))) throw new ApiError(404, "APPLICATION_NOT_FOUND");
-    if (input.reviewerKind !== undefined && !(REVIEWER_KINDS as readonly string[]).includes(input.reviewerKind)) throw new ApiError(400, "INVALID_INPUT", "reviewerKind: named, manager or application_owner");
+    if (input.reviewerKind !== undefined && !(REVIEWER_KINDS as readonly string[]).includes(input.reviewerKind)) throw new ApiError(400, "INVALID_INPUT", "reviewerKind: named, manager, application_owner or entitlement_owner");
+    // COMPLIANCE-P0-15: optionally one entitlement and one person, both of this organization.
+    const entitlement = typeof input.scope?.entitlementId === "string" && input.scope.entitlementId ? input.scope.entitlementId : null;
+    if (entitlement && (!UUID_RE.test(entitlement) || !(await getEntitlement(tenantId, entitlement)))) throw new ApiError(404, "ENTITLEMENT_NOT_FOUND", "No such entitlement");
+    const person = typeof input.scope?.identityId === "string" && input.scope.identityId ? input.scope.identityId : null;
+    if (person && !(await getIdentityReviewInfo(tenantId, [person])).has(person)) throw new ApiError(404, "IDENTITY_NOT_FOUND", "No such person");
+  } else if (input.scopeType === "role_membership") {
+    // COMPLIANCE-P0-15: one business role (an active access package); its owner reviews it, the named reviewer as fallback.
+    const packageId = typeof input.scope?.packageId === "string" && input.scope.packageId ? input.scope.packageId : null;
+    if (!packageId || !UUID_RE.test(packageId)) throw new ApiError(400, "INVALID_INPUT", "scope.packageId is required for a role-based campaign");
+    if (!(await listPackagesForReview(tenantId, packageId)).length) throw new ApiError(404, "PACKAGE_NOT_FOUND", "No such active role");
+    if (input.reviewerKind !== undefined && input.reviewerKind !== "named") throw new ApiError(400, "INVALID_INPUT", "reviewerKind: a role's owner reviews it; the named reviewer is the fallback");
   } else if (input.scopeType === "role_assignments") {
     // COMPLIANCE-P0-11: the manager or the named reviewer (roles have no application owner).
     if (input.reviewerKind !== undefined && input.reviewerKind !== "named" && input.reviewerKind !== "manager") throw new ApiError(400, "INVALID_INPUT", "reviewerKind: named or manager");
@@ -484,7 +594,7 @@ async function resolveLaunchScope(tenantId: string, input: LaunchCampaignInput):
  */
 export type CampaignPreview = { items: number; subjects: number; privileged: number; reviewers: number; reviewerFallbacks: number };
 
-const PREVIEW_SCOPES = ["agent", "application", "entitlement", "privileged_access", "high_risk_agent", "identity_access", "role_assignments", "package_contents", "application_contents"] as const;
+const PREVIEW_SCOPES = ["agent", "application", "entitlement", "privileged_access", "high_risk_agent", "identity_access", "role_assignments", "package_contents", "application_contents", "role_membership"] as const;
 
 export async function previewCampaign(tenantId: string, input: LaunchCampaignInput): Promise<CampaignPreview> {
   await requireFeature(tenantId, "certifications");
@@ -511,15 +621,26 @@ export async function previewCampaign(tenantId: string, input: LaunchCampaignInp
  * Scope input is validated before the campaign row is created, so an
  * invalid scope never leaves behind an empty, orphaned campaign.
  */
-export async function launchCampaign(tenantId: string, actorId: string, input: LaunchCampaignInput): Promise<CertificationCampaign> {
+/**
+ * COMPLIANCE-P0-15: how a campaign was started. `templateId` records the
+ * template it came from; an event-based launch also names the lifecycle
+ * event (`triggerEventId`, at most one campaign per template and event)
+ * and runs as the system: written with the service role, pinned to the
+ * tenant (§14), and built before returning, as it covers one person.
+ */
+export type LaunchOptions = { templateId?: string; triggerEventId?: string; system?: boolean };
+
+const PEOPLE_REVIEWER_SCOPES = new Set<CampaignScopeType>(["identity_access", "role_assignments"]);
+
+export async function launchCampaign(tenantId: string, actorId: string, input: LaunchCampaignInput, opts: LaunchOptions = {}): Promise<CertificationCampaign> {
   // PLATFORM-P0-12: certification campaigns are a flag-gated capability (on by default).
   await requireFeature(tenantId, "certifications");
   if (!input.name.trim()) throw new ApiError(400, "INVALID_INPUT", "name is required");
 
   const { applicationId, entitlementId } = await resolveLaunchScope(tenantId, input);
 
-  const supabase = await supabaseServer();
-  const { data: campaignRow, error: campaignError } = await supabase
+  const client = opts.system ? supabaseServiceRole() : await supabaseServer();
+  const { data: campaignRow, error: campaignError } = await client
     .from("certification_campaigns")
     .insert({
       tenant_id: tenantId,
@@ -531,27 +652,41 @@ export async function launchCampaign(tenantId: string, actorId: string, input: L
       due_date: input.dueDate ?? null,
       created_by: actorId,
       build_status: "building",
-      reviewer_kind: input.scopeType === "identity_access" || input.scopeType === "role_assignments" ? (input.reviewerKind ?? "named") : "named",
+      reviewer_kind: PEOPLE_REVIEWER_SCOPES.has(input.scopeType) ? (input.reviewerKind ?? "named") : "named",
+      ...(opts.templateId ? { template_id: opts.templateId } : {}),
+      ...(opts.triggerEventId ? { trigger_event_id: opts.triggerEventId } : {}),
     })
     .select()
     .single();
+  if (campaignError?.code === "23505" && opts.triggerEventId) throw new ApiError(409, "ALREADY_LAUNCHED", "This event already started a campaign from this template");
   if (campaignError || !campaignRow) throw new ApiError(500, "CREATE_FAILED", campaignError?.message ?? "Failed to create campaign");
+  if (campaignRow.tenant_id !== tenantId) throw new ApiError(500, "CREATE_FAILED", "Tenant mismatch");
 
   const campaign = toCertificationCampaign(campaignRow);
-
-  // §15: the items are built after the response, so a large organization's launch returns at once.
-  after(() => buildCampaign(tenantId, actorId, campaign.id, input, { applicationId, entitlementId }));
 
   await writeAudit({
     tenantId,
     actorId,
-    actorType: "user",
+    actorType: opts.system ? "system" : "user",
     action: "compliance.campaign_launched",
     objectType: "certification_campaign",
     objectId: campaign.id,
     outcome: "success",
-    metadata: { scopeType: input.scopeType, scope: input.scope ?? {}, ...(input.scopeType === "identity_access" || input.scopeType === "role_assignments" ? { reviewerKind: input.reviewerKind ?? "named" } : {}) },
+    metadata: {
+      scopeType: input.scopeType,
+      scope: input.scope ?? {},
+      ...(PEOPLE_REVIEWER_SCOPES.has(input.scopeType) ? { reviewerKind: input.reviewerKind ?? "named" } : {}),
+      ...(opts.templateId ? { templateId: opts.templateId } : {}),
+      ...(opts.triggerEventId ? { lifecycleEventId: opts.triggerEventId } : {}),
+    },
   });
+
+  if (opts.system) {
+    await buildCampaign(tenantId, actorId, campaign.id, input, { applicationId, entitlementId }, "system");
+  } else {
+    // §15: the items are built after the response, so a large organization's launch returns at once.
+    after(() => buildCampaign(tenantId, actorId, campaign.id, input, { applicationId, entitlementId }));
+  }
 
   return campaign;
 }

@@ -190,7 +190,7 @@ export { listDelegations, createDelegation, revokeDelegation, requestsActingFor,
 export { listAgentDelegations, requestAgentDelegation, decideAgentDelegation, revokeAgentDelegation, type AgentDelegation } from "./agentDelegations";
 export { parseOnBehalfOf } from "./agentDelegationRules";
 export { listGovernanceChanges, decideGovernanceChange, type GovernanceChange } from "./governanceChanges";
-export { listIdentityGrantsForReview, requestCertifiedRemoval, type ReviewableGrant } from "./certificationSupport";
+export { listIdentityGrantsForReview, listPackageAssignmentsForReview, requestCertifiedRemoval, type ReviewableGrant, type ReviewableMembership, type GrantReviewFilter } from "./certificationSupport";
 export { listRequestDrafts, saveRequestDraft, deleteRequestDraft, type RequestDraft } from "./requestDrafts";
 export { LINK_MESSAGE, type LinkState } from "./approvalLinkRules";
 export { submitRequestBasket, modelAfter, listBasketRequests, type BasketResult, type BasketRequest } from "./requestBaskets";

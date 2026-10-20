@@ -15,6 +15,13 @@ describe("reviews of people's access (COMPLIANCE-P0-10)", () => {
     expect(resolveReviewer("application_owner", { ...people, applicationOwnerUserId: "u-ana" }, "u-named")).toEqual({ reviewerId: "u-named", fallback: true });
   });
 
+  it("COMPLIANCE-P0-15: the entitlement's owner, else the application's owner, never the person", () => {
+    expect(resolveReviewer("entitlement_owner", { ...people, entitlementOwnerUserId: "u-ent" }, "u-named")).toEqual({ reviewerId: "u-ent", fallback: false });
+    expect(resolveReviewer("entitlement_owner", { ...people, entitlementOwnerUserId: null }, "u-named")).toEqual({ reviewerId: "u-own", fallback: false });
+    expect(resolveReviewer("entitlement_owner", { ...people, entitlementOwnerUserId: "u-ana" }, "u-named")).toEqual({ reviewerId: "u-named", fallback: true });
+    expect(resolveReviewer("entitlement_owner", { ...people, applicationOwnerUserId: null }, "u-named")).toEqual({ reviewerId: "u-named", fallback: true });
+  });
+
   it("never lets anyone certify their own access, but lets them revoke it", () => {
     expect(selfCertificationRefused("approve", "u-ana", "u-ana")).toBe(true);
     expect(selfCertificationRefused("revoke", "u-ana", "u-ana")).toBe(false);
