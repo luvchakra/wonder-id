@@ -188,7 +188,7 @@ All information from your systems reaches WonderID through **connections**. Ther
 | Kind of system | Built-in types |
 |---|---|
 | HR | Frappe HR |
-| Directories and identity providers | LDAP directory (which can also add and remove group members), Keycloak, Saviynt, and any identity provider or HR system that pushes people over SCIM 2.0 |
+| Directories and identity providers | Active Directory (people, accounts, managed service accounts, groups; can also add and remove group members), LDAP directory (which can also add and remove group members), Keycloak, Saviynt, and any identity provider or HR system that pushes people over SCIM 2.0 |
 | Applications | ERPNext, Gitea, Mattermost, Nextcloud, Zendesk, and any application with a SCIM 2.0 service (which can also add and remove group members, disable and create users) |
 | Infrastructure and data | PostgreSQL, Kubernetes, OpenBao (secrets) |
 | AI | MCP server, Runtime Gateway |
@@ -697,6 +697,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 20 Oct 2026 | Active Directory is a built-in connection type: people with their managers, accounts (disabled, privileged, expiring, last sign-in), managed service accounts, security and distribution groups and memberships; it can add and remove group members once changes are turned on. |
 | 20 Oct 2026 | An application's page has two new tabs: Policies (the request policies that apply to it and who approves under each, with a link to change them) and Audit History (the latest changes to the application, its entitlements and entitlement types). |
 | 20 Oct 2026 | The Email (SMTP) page has a Provider list (GoDaddy, Gmail, Microsoft 365, Outlook.com, SendGrid, Mailgun, Zoho Mail and others) that fills in the server, security and port. |
 | 20 Oct 2026 | Request Policies is simpler: choosing a scope opens its policy straight away, and the form has three parts (who can request, approval, how long access lasts). One "Approved by" choice lists your approval workflows and the built-in routes, replacing three separate fields. Each policy's name opens its form. |

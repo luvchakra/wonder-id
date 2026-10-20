@@ -954,6 +954,193 @@ describe("contract: ldap connector ldap-directory", () => {
   });
 });
 
+// ---------------------------------------------------------------- active directory
+
+const adDef = BUILTIN_DEFINITIONS.find((d) => d.key === "active-directory")!;
+
+describe("contract: ldap connector active-directory", () => {
+  const settings = { url: "ldaps://dc01.corp.contract.test", baseDn: "DC=corp,DC=contract,DC=test" };
+  const config = builtin(adDef, settings);
+  const secrets = (tag: string) => ({ bindDn: `svc-wonderid${tag}@corp.contract.test`, password: `Pw${tag}Zq9` });
+  const setting = (key: string) => String(adDef.settings.find((s) => s.key === key)!.default);
+  const disabled = "(userAccountControl:1.2.840.113556.1.4.803:=2)";
+  const enabledOf = (f: string) => `(&${f}(!${disabled}))`;
+  const disabledOf = (f: string) => `(&${f}${disabled})`;
+  const [people, services, groups] = [setting("userFilter"), setting("serviceAccountFilter"), setting("groupFilter")];
+  const filetime = (iso: string) => String((BigInt(Date.parse(iso)) + BigInt("11644473600000")) * BigInt(10000));
+  const ou = (cn: string, unit: string) => `CN=${cn},OU=${unit},DC=corp,DC=contract,DC=test`;
+  const finance = { dn: ou("Finance", "Groups"), cn: ["Finance"], sAMAccountName: ["Finance"], groupType: ["-2147483646"] };
+  const admins = { dn: ou("Domain Admins", "Users"), cn: ["Domain Admins"], groupType: ["-2147483646"], adminCount: ["1"], description: ["Designated administrators of the domain"] };
+  const news = { dn: ou("Newsletter", "Groups"), cn: ["Newsletter"], groupType: ["8"] };
+  const ana = {
+    dn: ou("Ana Rao", "People"),
+    sAMAccountName: ["arao"],
+    userPrincipalName: ["arao@corp.contract.test"],
+    mail: ["Ana.Rao@CONTRACT.TEST"],
+    displayName: ["Ana Rao"],
+    givenName: ["Ana"],
+    sn: ["Rao"],
+    title: ["Controller"],
+    department: ["Finance"],
+    company: ["Contract Ltd"],
+    l: ["Pune"],
+    adminCount: ["1"],
+    lastLogonTimestamp: [filetime("2026-10-18T09:30:00Z")],
+    whenCreated: ["20240131120000.0Z"],
+    accountExpires: [filetime("2027-03-31T00:00:00Z")],
+    memberOf: [finance.dn, admins.dn],
+  };
+  const bo = { dn: ou("Bo Lee", "People"), sAMAccountName: ["blee"], cn: ["Bo Lee"], manager: [ana.dn], accountExpires: ["9223372036854775807"], memberOf: [finance.dn] };
+  const gmsa = { dn: ou("gmsa-etl", "Managed Service Accounts"), sAMAccountName: ["gmsa-etl$"], cn: ["gmsa-etl"], accountExpires: ["0"], memberOf: [news.dn] };
+
+  beforeEach(() => {
+    ldap.clients.length = 0;
+    ldap.entries = {
+      [enabledOf(people)]: [ana],
+      [disabledOf(people)]: [bo],
+      [enabledOf(services)]: [gmsa],
+      [disabledOf(services)]: [],
+      [groups]: [finance, admins, news],
+      [`(|${people}${services})`]: [ana, bo, gmsa],
+      "(objectClass=*)": [{ dn: settings.baseDn }],
+    };
+    ldap.bindError = null;
+    ldap.failFilter = null;
+    ldap.modifyCode = null;
+  });
+  const connect = async (tag = "A", def: ConnectorDefinition = adDef) => {
+    const c = new DefinitionConnector({ ldap: ldapDriver });
+    await c.authenticate(def === adDef ? config : custom(def, settings), JSON.stringify(secrets(tag)));
+    return c;
+  };
+  const byId = async (c: DefinitionConnector, kind: ResourceKind) => Object.fromEntries((await c.importKind(kind)).map((r) => [r.externalId, r.normalized]));
+
+  it("authentication: binds over verified LDAPS with a UPN; a refused bind fails without the password", async () => {
+    const c = await connect();
+    expect(await c.testConnection()).toEqual({ ok: true });
+    expect(ldap.clients[0].binds).toEqual([[secrets("A").bindDn, secrets("A").password]]);
+    expect(ldap.clients[0].options).toMatchObject({ url: "ldaps://203.0.113.10:636", tlsOptions: { servername: "dc01.corp.contract.test", rejectUnauthorized: true } });
+    ldap.bindError = Object.assign(new Error("80090308: LdapErr: DSID-0C090447, data 52e"), { name: "InvalidCredentialsError", code: 49 });
+    const denied = await (await connect()).testConnection();
+    expect(denied.ok).toBe(false);
+    expect(denied.message).not.toContain(secrets("A").password);
+  });
+
+  it("discovery: one base search tests it; it reads people, accounts, groups and memberships, and changes only group members", async () => {
+    const c = await connect();
+    await c.testConnection();
+    expect(ldap.clients[0].searches).toEqual([{ base: settings.baseDn, options: expect.objectContaining({ scope: "base", filter: "(objectClass=*)", sizeLimit: 1 }) }]);
+    expect(capabilitiesOf(adDef)).toMatchObject({ importIdentities: true, importAccounts: true, importEntitlements: true, importAccess: true });
+    expect(writeCapabilitiesOf(adDef)).toEqual({ revokeAccess: true, grantAccess: true, disableAccount: false, createAccount: false, deprovision: true, provision: true });
+  });
+
+  it("accounts: enabled and disabled by userAccountControl, service accounts typed, privilege, sign-in and expiry read", async () => {
+    const c = await connect();
+    const accounts = await byId(c, "account");
+    expect(ldap.clients[0].searches.map((s) => s.options.filter)).toEqual([enabledOf(people), disabledOf(people), enabledOf(services), disabledOf(services)]);
+    expect(accounts[ana.dn]).toMatchObject({
+      username: "arao",
+      email: "ana.rao@contract.test",
+      owner: "ana.rao@contract.test",
+      displayName: "Ana Rao",
+      status: "active",
+      accountType: "human",
+      privileged: true,
+      lastLoginAt: "2026-10-18",
+      createdAt: "2024-01-31",
+      expiresAt: "2027-03-31",
+      entitlements: [finance.dn, admins.dn],
+      application: `Active Directory (${settings.baseDn})`,
+    });
+    expect(accounts[bo.dn]).toMatchObject({ username: "blee", displayName: "Bo Lee", status: "disabled", privileged: false });
+    expect(accounts[bo.dn]!.expiresAt).toBeUndefined();
+    expect(accounts[gmsa.dn]).toMatchObject({ username: "gmsa-etl$", accountType: "service", status: "active" });
+    expect(accounts[gmsa.dn]!.expiresAt).toBeUndefined();
+    expect(accounts[gmsa.dn]!.owner).toBeUndefined();
+  });
+
+  it("identities: people only, with their manager's DN, and disabled people inactive", async () => {
+    const people = await byId(await connect(), "identity");
+    expect(Object.keys(people)).toEqual([ana.dn, bo.dn]);
+    expect(people[ana.dn]).toMatchObject({ firstName: "Ana", lastName: "Rao", title: "Controller", department: "Finance", organization: "Contract Ltd", location: "Pune", status: "active", identityType: "HUMAN", endDate: "2027-03-31" });
+    expect(people[bo.dn]).toMatchObject({ displayName: "Bo Lee", managerExternalId: ana.dn, status: "inactive" });
+  });
+
+  it("groups and memberships: security or distribution, protected groups privileged, memberships from memberOf", async () => {
+    const c = await connect();
+    const ents = await byId(c, "entitlement");
+    expect(ents[finance.dn]).toMatchObject({ name: "Finance", type: "security_group", privilegeLevel: "standard" });
+    expect(ents[admins.dn]).toMatchObject({ type: "security_group", privilegeLevel: "admin", description: "Designated administrators of the domain" });
+    expect(ents[news.dn]).toMatchObject({ type: "distribution_group" });
+    const grants = (await c.importKind("access_grant")).map((r) => [r.normalized!.accountExternalId, r.normalized!.entitlementExternalId]);
+    expect(grants).toEqual([
+      [ana.dn, finance.dn],
+      [ana.dn, admins.dn],
+      [bo.dn, finance.dn],
+      [gmsa.dn, news.dn],
+    ]);
+  });
+
+  it("pagination: every search is paged with a size limit", async () => {
+    const c = await connect();
+    await c.importKind("account");
+    for (const s of ldap.clients[0].searches) expect(s.options).toMatchObject({ paged: { pageSize: 500 }, sizeLimit: LIMITS.defaultMaxRecords });
+  });
+
+  it("partial failure and retry: a failed group search fails its kind once, accounts still read", async () => {
+    ldap.failFilter = groups;
+    const c = await connect();
+    expect(await c.importKind("account")).toHaveLength(3);
+    await expect(c.importKind("entitlement")).rejects.toThrow("Busy");
+    expect(ldap.clients[0].searches.filter((s) => s.options.filter === groups)).toHaveLength(1);
+  });
+
+  it("rate limiting: the Gateway paces the connect, the test and each search", async () => {
+    const sleeps = await gatewayRun({ socketDrivers: { ldap: ldapDriver } }, config, JSON.stringify(secrets("A")), async (c) => {
+      await c.testConnection();
+      await c.importKind("account");
+    });
+    const rate = adDef.rateLimitPerSecond ?? 10;
+    expect(sleeps).toEqual([1, 2, 3, 4, 5].map((k) => Math.ceil((k / rate) * 1000)));
+  });
+
+  it("idempotency: a membership already in place counts as done; anything else fails without the password", async () => {
+    const target = { account: ana.dn, entitlement: finance.dn };
+    const c = await connect();
+    ldap.modifyCode = 20;
+    await expect(c.write("grant_access", target, "attempt-0001")).resolves.toEqual({});
+    ldap.modifyCode = 16;
+    await expect(c.write("revoke_access", target, "attempt-0002")).resolves.toEqual({});
+    ldap.modifyCode = 50;
+    const err = await c.write("revoke_access", target, "attempt-0003").then(() => null, (e: Error) => e);
+    expect(err!.message).toBe("The directory refused the change (LDAP result 50)");
+    expect(ldap.clients[0].modifies).toEqual([finance.dn, finance.dn, finance.dn]);
+    await expect(c.write("disable_account", target, "attempt-0004")).rejects.toThrow("cannot disable account");
+  });
+
+  it("credential rotation: the next session binds with the new secrets, and the old one is closed", async () => {
+    const c = await connect("A");
+    await c.testConnection();
+    await c.close();
+    await c.authenticate(config, JSON.stringify(secrets("B")));
+    await c.testConnection();
+    expect(ldap.clients[0].unbound).toBe(true);
+    expect(ldap.clients[1].binds).toEqual([[secrets("B").bindDn, secrets("B").password]]);
+  });
+
+  it("traceability: records are keyed by DN and keep the entry; memberships keep their account", async () => {
+    const c = await connect();
+    expect((await c.importKind("account")).map((r) => [r.externalId, r.raw])).toEqual([
+      [ana.dn, ana],
+      [bo.dn, bo],
+      [gmsa.dn, gmsa],
+    ]);
+    const grants = await c.importKind("access_grant");
+    expect(grants[0].externalId).toBe(`${finance.dn}|${ana.dn}`);
+    expect((grants[0].raw as Json)._parent).toEqual(ana);
+  });
+});
+
 // ---------------------------------------------------------------- sql
 
 const sqlDef = BUILTIN_DEFINITIONS.find((d) => d.key === "postgresql")!;
@@ -1393,7 +1580,7 @@ describe("contract: every built-in is covered for every property, or has a docum
   });
 
   it("each non-http built-in has its own block above", () => {
-    const covered = new Set(["ldap-directory", "postgresql", "csv-file", "mcp-server", "webhook", "runtime-gateway", "scim-inbound"]);
+    const covered = new Set(["ldap-directory", "active-directory", "postgresql", "csv-file", "mcp-server", "webhook", "runtime-gateway", "scim-inbound"]);
     expect(BUILTIN_DEFINITIONS.filter((d) => d.driver !== "http" && !covered.has(d.key)).map((d) => d.key)).toEqual([]);
   });
 });

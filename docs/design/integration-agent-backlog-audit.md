@@ -3097,3 +3097,40 @@ and socket timeouts, and the host vetted by `resolveSafeHost` (the LDAP and
 SQL drivers' address guard), so a private or reserved address is refused.
 No allowlist of `tests/architecture/connector-boundary.test.ts` was
 widened; the test passes. Verified with the Operations tests named there.
+
+## 2026-10-20 — Active Directory connector (fix list item 19)
+
+A built-in definition, `active-directory` 1.0.0
+(`modules/integrations/framework/definitions/active-directory.ts`), on the
+existing ldap driver: no new driver, route or client (non-negotiable #20;
+no allowlist of `connector-boundary.test.ts` widened).
+
+- **Settings:** domain controller address (LDAPS, 636, or 3269 for the
+  global catalog), base DN, people, service account and group filters (AD
+  defaults), an internal CA certificate. The bind account may be a DN or a
+  user principal name.
+- **Reads:** identities (people, with manager DN, department, division,
+  company, office, employee type, end date from `accountExpires`); accounts
+  (people and managed service accounts, `adminCount` as privileged,
+  `lastLogonTimestamp`, `whenCreated`, `accountExpires`, `memberOf`); groups
+  (security or distribution from `groupType`, protected groups as admin);
+  memberships from each account's `memberOf`, so groups past AD's 1,500-value
+  `member` range are read whole. Enabled and disabled entries are read by
+  separate searches with AD's bitwise matching rule on `userAccountControl`,
+  which sets the status, since mappings have no bitwise transform.
+- **Writes** (once turned on): add and remove group members, as
+  `ldap-directory`. Disabling an account is deliberately not offered: it
+  would rewrite `userAccountControl` and drop the account's other flags.
+- **Framework:** one new named transform, `filetime` (Windows FILETIME to a
+  date; `0` and the maximum mean never), in `types.ts` and `mapping.ts`.
+- **Left out:** nested group memberships and the primary group (Domain
+  Users), which `memberOf` does not list; keying by `objectGUID` (DNs are
+  what group changes name).
+
+Verified: contract tests for the definition (11, in `contract.test.ts`:
+authentication, discovery, accounts, identities, groups and memberships,
+pagination, partial failure, rate limiting, idempotency, credential
+rotation, traceability); `npx vitest run modules/integrations
+tests/architecture` 571 passed; `npm run typecheck` clean apart from the
+missing local product images; eslint clean on changed files. Not yet run
+against a live domain controller (`live.test.ts` needs a connections file).

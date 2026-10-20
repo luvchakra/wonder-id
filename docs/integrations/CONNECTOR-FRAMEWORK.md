@@ -180,6 +180,7 @@ owner's action.
 | `frappe-hr` | HR | http | identities (people, managers, joiners and leavers) |
 | `erpnext` | application | http | accounts, roles, role assignments |
 | `ldap-directory` | directory | ldap | accounts, groups, memberships; **writes** (1.1.0, once turned on): add and remove group members |
+| `active-directory` | directory | ldap | people (with manager), accounts enabled or disabled, managed service accounts, privileged (adminCount), last sign-in and expiry, security and distribution groups, memberships (memberOf); **writes** (once turned on): add and remove group members |
 | `keycloak` | identity provider | http | accounts (service accounts too), groups and realm roles, grants |
 | `gitea` | application | http | accounts and bots, organization teams, membership |
 | `mattermost` | application | http | accounts and bots, teams, membership |
@@ -770,6 +771,7 @@ may be a list, tried in order: the first non-empty value wins. In a path:
 - `not`;
 - `date`, which accepts ISO dates, epoch seconds or milliseconds, and LDAP generalized time;
 - `present`, true when the value is non-empty;
+- `filetime`, a Windows FILETIME (Active Directory's `lastLogonTimestamp`, `accountExpires`) as `YYYY-MM-DD`; `0` and the maximum value (never) give null;
 - `{ "map": { from: to }, "default"? }`;
 - `{ "prefix": "…" }`, true when the text starts with it;
 - `{ "contains": "…" }`, true when a list holds the value, or a space- or comma-separated text holds it as a word;

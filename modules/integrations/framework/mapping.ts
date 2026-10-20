@@ -108,6 +108,16 @@ export function safePattern(pattern: string): string | null {
   return null;
 }
 
+/** Windows FILETIME (100 ns since 1601-01-01 UTC, AD's lastLogonTimestamp and accountExpires) as a date; 0 and the maximum mean "never". */
+function fromFiletime(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  if (!/^\d{1,19}$/.test(text)) return null;
+  const ticks = BigInt(text);
+  if (ticks === BigInt(0) || ticks >= BigInt("9223372036854775807")) return null;
+  const d = new Date(Number(ticks / BigInt(10000) - BigInt("11644473600000")));
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+
 function addToDate(value: unknown, n: number, unit: "days" | "months" | "years"): string | null {
   const date = toDate(Array.isArray(value) ? value[0] : value);
   if (!date) return null;
@@ -188,6 +198,8 @@ export function applyTransform(value: unknown, transform: Transform, scope?: Tem
       return !applyTransform(value, "boolean");
     case "date":
       return toDate(Array.isArray(value) ? value[0] : value);
+    case "filetime":
+      return fromFiletime(Array.isArray(value) ? value[0] : value);
     case "present":
       return !(value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0));
     case "split":
