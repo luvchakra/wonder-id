@@ -4460,3 +4460,24 @@ request policies) and knowledge base updated. Verified:
 `npx vitest run modules/ui` (16 files, 126 tests passed) and eslint on the
 changed files; typecheck clean apart from the known missing-asset image errors
 of `app/welcome`.
+
+## 2026-10-20 — Application page: Policies and Audit History tabs (owner test feedback item 18)
+
+Owner request: "Add 'Audit History' tab here, add 'Policies' tab as well,
+there various kind of application level policies will be applied,
+including Request Policies". On `/access/applications/[id]`:
+- **Policies** lists the request policies that govern the application: its
+  whole-application policy, its entitlement policies, and the organization
+  default when it has no whole-application policy of its own. Each shows
+  its scope, who approves (an approval workflow, linked, or the built-in
+  route) and the longest duration; "Set a policy"/"Change policy" opens its
+  form on Request Policies. Request policies are the only application-level
+  policy type today; others join this tab when they exist.
+- **Audit History** (only with `audit.read`) shows the latest 50 audit
+  events about the application, its entitlements and its entitlement types
+  (`listObjectActivity`, under RLS and filtered by tenant), streamed in
+  `<Suspense>` so it never delays the page (§15.1 rule 8). The approval
+  workflow list joined the page's existing parallel wave.
+
+Verified: eslint on the page, typecheck clean apart from the known
+`app/welcome` image errors, `npx vitest run modules/ui/help`.
