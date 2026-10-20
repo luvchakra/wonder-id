@@ -245,7 +245,7 @@ export type HttpRequestSpec = {
   body?: unknown;
 };
 
-export const TRANSFORMS = ["lower", "upper", "trim", "first", "join", "string", "boolean", "not", "date", "number", "split", "present"] as const;
+export const TRANSFORMS = ["lower", "upper", "trim", "first", "join", "string", "boolean", "not", "date", "number", "split", "present", "filetime"] as const;
 export type NamedTransform = (typeof TRANSFORMS)[number];
 export type Transform =
   | NamedTransform
