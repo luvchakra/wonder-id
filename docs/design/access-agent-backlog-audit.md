@@ -4792,3 +4792,35 @@ reads the caller's identity once and marks such lines "For you". The API's
 on the changed files, `app/(customer)/access/requests`, `modules/ui/help`
 and `lib/tenant` tests: 11 files, 66 passed. E2E waits for the nightly run
 (owner instruction, 20 Oct: E2E only at night).
+
+## 2026-10-20 — Request Policies form redesigned around approval workflows (owner test feedback item 17)
+
+Owner request: "now that we have approval workflows, lot of options here may
+not make sense anymore, redesign this and update."
+
+- **One approval choice.** "Approval workflow", "Approval route" and
+  "Manager and owner decide" were three fields where the first silently
+  overrode the other two. They are now one "Approved by" select: the
+  organization's active approval workflows, then the built-in routes
+  (Manager; Owner; Manager, then owner; Manager and owner at the same
+  time). `approvalChoiceOf()` / `parseApprovalChoice()` in
+  `requestRules.ts` map it to the stored `approval_workflow_id`,
+  `approval` and `approval_mode`; the save action translates it and
+  `validatePolicyInput` still checks every value. Choosing a workflow keeps
+  the stored route. No schema or API change: the JSON API still takes the
+  three fields.
+- **Grouped.** The form is in three parts: who can request, approval
+  (approved by, days each approver has, on timeout, risk threshold,
+  auto-approve below it) and how long access lasts.
+- **Scope opens at once.** The Scope select navigates on change (new
+  `ScopePicker`); the Choose button is gone. Before, the select could show
+  one application while the form below still held the organization
+  default (the owner's screenshot).
+- **Links.** Each policy name in the table opens its form
+  (`?app=…#set-policy`); under Approved by, a link to Approval workflows
+  (or to create one when none exist).
+
+Controls on the form (with an application chosen): 18 before, 16 after plus one link.
+Verified: `npx vitest run modules/access-governance/requestRules.test.ts`
+(17 passed, 2 new), eslint on the changed files, typecheck clean apart from
+the known `app/welcome` image errors.

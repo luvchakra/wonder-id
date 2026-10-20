@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { assessRisk, entitlementRequestability, evaluateRequest, resolvePolicy, validatePolicyInput, type RequestContext, type RequestPolicy } from "./requestRules";
+import { approvalChoiceOf, assessRisk, entitlementRequestability, parseApprovalChoice, evaluateRequest, resolvePolicy, validatePolicyInput, type RequestContext, type RequestPolicy } from "./requestRules";
 
 const policy = (over: Partial<RequestPolicy> = {}): RequestPolicy => ({
   id: "p",
@@ -160,5 +160,22 @@ describe("entitlementRequestability (owner feedback 2026-10-14)", () => {
     expect(entitlementRequestability(allows(false), true)).toEqual({ requestable: false, reason: "policy" });
     expect(entitlementRequestability(allows(true), false)).toEqual({ requestable: false, reason: "entitlement" });
     expect(entitlementRequestability(allows(true), true)).toEqual({ requestable: true, reason: null });
+  });
+});
+
+describe("approval choice (feedback item 17)", () => {
+  it("round-trips a workflow and every built-in route", () => {
+    const id = "0b9a1c52-1111-4222-8333-444455556666";
+    expect(approvalChoiceOf({ approval: "manager_approval", approvalMode: "sequential", approvalWorkflowId: id })).toBe(`workflow:${id}`);
+    expect(parseApprovalChoice(`workflow:${id}`)).toEqual({ approvalWorkflowId: id });
+    expect(approvalChoiceOf({ approval: "owner_approval", approvalMode: "parallel", approvalWorkflowId: null })).toBe("owner_approval");
+    expect(parseApprovalChoice("owner_approval")).toEqual({ approvalWorkflowId: "", approval: "owner_approval" });
+    expect(approvalChoiceOf({ approval: "manager_and_owner", approvalMode: "parallel" })).toBe("manager_and_owner:parallel");
+    expect(parseApprovalChoice("manager_and_owner:sequential")).toEqual({ approvalWorkflowId: "", approval: "manager_and_owner", approvalMode: "sequential" });
+  });
+
+  it("leaves a bad choice for validation to refuse", () => {
+    expect(() => validatePolicyInput({ name: "x", ...parseApprovalChoice("workflow:not-a-uuid") }, true)).toThrow();
+    expect(() => validatePolicyInput({ name: "x", ...parseApprovalChoice("anyone") }, true)).toThrow();
   });
 });

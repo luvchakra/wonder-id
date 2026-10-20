@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAnyPermission, requirePermission } from "@/lib/rbac/requirePermission";
 import type { AccessRequestStatus } from "@/lib/shared/types/access-governance";
-import { cancelAccessRequest, decideAccessRequest, decideApprovalStep, saveRequestPolicy, submitAccessRequest } from "@/modules/access-governance/service";
+import { cancelAccessRequest, decideAccessRequest, decideApprovalStep, parseApprovalChoice, saveRequestPolicy, submitAccessRequest } from "@/modules/access-governance/service";
 
 /**
  * ACCESS-P0-18 — request catalog forms. Each returns the real outcome
@@ -134,6 +134,9 @@ export async function savePolicyAction(_prev: RequestFormState, formData: FormDa
   const input: Record<string, unknown> = {};
   for (const k of POLICY_FIELDS) if (formData.has(k)) input[k] = String(formData.get(k) ?? "");
   for (const k of POLICY_FLAGS) input[k] = formData.get(k) === "on";
+  // The form's single "Approval" choice: a workflow, or a built-in route and its order.
+  const choice = formData.get("approvalChoice");
+  if (typeof choice === "string" && choice) Object.assign(input, parseApprovalChoice(choice));
   try {
     const result = await saveRequestPolicy(ctx.tenantId!, ctx.userId, input);
     revalidatePath("/access/request-policies");
