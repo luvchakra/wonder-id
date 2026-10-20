@@ -17,8 +17,8 @@ describe("the area list (owner decision, 2026-10-13, the owner's navigation shee
   });
 
   it("keeps Request Access first under Access, and Self Service for what anyone can start", () => {
-    expect(sectionPages(SHELL_NAV[2]).map((p) => p.label)).toEqual(["Request Access", "All Requests", "Provisioning Tasks", "Access Packages", "Entitlements", "Request Policies"]);
-    expect(sectionPages(SHELL_NAV[6]).map((p) => p.label)).toEqual(["Onboard Application", "Register Agent"]);
+    expect(sectionPages(SHELL_NAV[2]).map((p) => p.label)).toEqual(["Request Access", "All Requests", "Provisioning Tasks", "Access Packages"]);
+    expect(sectionPages(SHELL_NAV[6]).map((p) => p.label)).toEqual(["Register Agent"]);
   });
 
   it("lists every href once", () => {
@@ -38,7 +38,10 @@ describe("the area list (owner decision, 2026-10-13, the owner's navigation shee
     expect(activeArea(SHELL_NAV, "/access/requests/req-1")?.label).toBe("Access");
     expect(activeArea(SHELL_NAV, "/access/fulfilment")?.label).toBe("My Workspace");
     expect(activeArea(SHELL_NAV, "/access/fulfilment", "view=all")?.label).toBe("Access");
-    expect(activeArea(SHELL_NAV, "/access/applications/new")?.label).toBe("Self Service");
+    expect(activeArea(SHELL_NAV, "/access/applications/new")?.label).toBe("Administration");
+    expect(activeArea(SHELL_NAV, "/access/entitlements")?.label).toBe("Administration");
+    expect(activeArea(SHELL_NAV, "/access/request-policies")?.label).toBe("Administration");
+    expect(activeArea(SHELL_NAV, "/access/packages")?.label).toBe("Access");
     expect(activeArea(SHELL_NAV, "/agents/new")?.label).toBe("Self Service");
     expect(activeArea(SHELL_NAV, "/access/applications/app-1")?.label).toBe("Administration");
     expect(activeArea(SHELL_NAV, "/access", "status=onboarding")?.label).toBe("Administration");
@@ -77,8 +80,8 @@ describe("navFor", () => {
   it("shows a member only the pages they may open, and drops empty areas", () => {
     const nav = navFor(SHELL_NAV, ["access.read"]);
     expect(nav.map((s) => s.label)).toEqual(["Home", "My Workspace", "Access", "Administration"]);
-    expect(sectionPages(nav[2]).map((p) => p.label)).toEqual(["Request Access", "All Requests", "Provisioning Tasks", "Access Packages", "Entitlements"]);
-    expect(sectionPages(nav[3]).map((p) => p.label)).toEqual(["Accounts", "Application Catalog", "Onboarding Reviews", "Data Sources"]);
+    expect(sectionPages(nav[2]).map((p) => p.label)).toEqual(["Request Access", "All Requests", "Provisioning Tasks", "Access Packages"]);
+    expect(sectionPages(nav[3]).map((p) => p.label)).toEqual(["Accounts", "Application Catalog", "Onboarding Reviews", "Entitlements", "Data Sources"]);
     expect(nav[3].href).toBe("/access/accounts");
   });
 
