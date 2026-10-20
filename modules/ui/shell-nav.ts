@@ -96,6 +96,9 @@ export const ADMIN_AREA: ShellNavItem = {
       [
         page("Application Catalog", "/access", "access.read"),
         page("Onboarding Reviews", "/access?status=onboarding", "access.read"),
+        // Configuring the catalog is an admin activity (owner request, 2026-10-20): moved here from Access and Self Service.
+        page("Onboard Application", "/access/applications/new", "access.manage"),
+        page("Entitlements", "/access/entitlements", "access.read"),
         page("Discovered Applications", "/integrations/discovery", "integration.read"),
         page("Onboarding Templates", "/access/onboarding-templates", "access.manage"),
         page("Data Sources", "/access/data-sources", "access.read"),
@@ -104,7 +107,13 @@ export const ADMIN_AREA: ShellNavItem = {
     ),
     group(
       "Policies & Controls",
-      [page("Governance Policies", "/policies", "policy.read"), page("Separation of Duties Rules", "/sod", "policy.read"), page("Controls Dashboard", "/controls", "policy.read")],
+      [
+        page("Governance Policies", "/policies", "policy.read"),
+        // Setting the organization's request terms is an admin activity (owner request, 2026-10-20): moved here from Access.
+        page("Request Policies", "/access/request-policies", "access.manage"),
+        page("Separation of Duties Rules", "/sod", "policy.read"),
+        page("Controls Dashboard", "/controls", "policy.read"),
+      ],
       "Scale",
     ),
     group("Reports & Audit", [page("Reports", "/reports", "report.read"), page("Audit Log", "/audit", "audit.read")], "FileBarChart"),
@@ -179,8 +188,6 @@ export const SHELL_NAV: ShellNavItem[] = [
       link("All Requests", "/access/requests", "ClipboardList", "access.read"),
       link("Provisioning Tasks", "/access/fulfilment?view=all", "Clock", "access.read"),
       link("Access Packages", "/access/packages", "Box", "access.read"),
-      link("Entitlements", "/access/entitlements", "KeyRound", "access.read"),
-      link("Request Policies", "/access/request-policies", "Scale", "access.manage"),
     ],
   },
   {
@@ -221,9 +228,9 @@ export const SHELL_NAV: ShellNavItem[] = [
   },
   {
     label: "Self Service",
-    href: "/access/applications/new",
+    href: "/agents/new",
     icon: "UserPlus",
-    children: [link("Onboard Application", "/access/applications/new", "Box", "access.manage"), link("Register Agent", "/agents/new", "UserPlus", "agent.create")],
+    children: [link("Register Agent", "/agents/new", "UserPlus", "agent.create")],
   },
   ADMIN_AREA,
 ];
