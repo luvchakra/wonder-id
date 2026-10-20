@@ -1102,3 +1102,20 @@ Not verified here: a real send through GoDaddy. This container cannot open
 SMTP connections (port 465 timed out), and the password can only be stored
 encrypted by the running app, so the owner saves the settings on the page
 and uses Send test e-mail.
+
+## 2026-10-20 — Email (SMTP): provider presets (owner request)
+
+Owner request: "give some popular options here as dropdown to start with
+like GoDaddy, GMail, MS Exchange, ReSend etc". `SMTP_PRESETS` in
+`modules/operations/smtpRules.ts` lists GoDaddy (Workspace Email), Gmail /
+Google Workspace, Microsoft 365 / Exchange Online, Outlook.com, Resend,
+SendGrid, Mailgun and Zoho Mail with each one's server, security and port
+(and the fixed user name for Resend and SendGrid). The page's new Provider
+select fills those fields (all stay editable), shows one line of advice
+where a provider needs it (app password, API key), and opens on the
+provider matching a saved server (`presetForHost`), or "Other". Nothing new
+is stored. The help guide names the providers except Resend, since its
+content test keeps WonderID's own vendors out of customer text. Verified: `npx vitest run modules/operations/smtpRules.test.ts`
+(10 passed: every preset passes `checkSmtpSettings`; host matching), eslint
+on the changed files, typecheck clean apart from the known `app/welcome`
+image errors.

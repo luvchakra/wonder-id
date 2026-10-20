@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/rbac/requirePermission";
 import { ApiError } from "@/lib/shared/types/foundation";
-import { getSmtpSettings } from "@/modules/operations/service";
+import { getSmtpSettings, presetForHost, SMTP_PRESETS } from "@/modules/operations/service";
 import { Card, CardBody, CardHeader, RecordProvenance, StatusBadge } from "@/modules/ui";
 import { SmtpSettingsForm } from "./SmtpSettingsForm";
 
@@ -50,6 +50,8 @@ export default async function EmailSettingsPage() {
         <CardBody className="space-y-3">
           {saved && saved.lastTestOk === false && saved.lastTestError ? <p className="text-sm text-destructive">{saved.lastTestError}</p> : null}
           <SmtpSettingsForm
+            presets={SMTP_PRESETS}
+            initialPreset={saved ? (presetForHost(saved.host)?.id ?? "") : "godaddy"}
             saved={
               saved
                 ? {

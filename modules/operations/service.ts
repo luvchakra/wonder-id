@@ -13,7 +13,7 @@ export { listAuditLogs, exportAuditLogs, listObjectActivity } from "./audit";
 export { toCsv } from "./csv";
 export { sendTenantEmail } from "./email";
 export { getSmtpSettings, saveSmtpSettings, removeSmtpSettings, sendSmtpTest, type SmtpSettingsView } from "./smtpSettings";
-export { checkSmtpSettings, SMTP_DEFAULT_PORT, type SmtpSecurity, type SmtpSettingsInput } from "./smtpRules";
+export { checkSmtpSettings, presetForHost, SMTP_DEFAULT_PORT, SMTP_PRESETS, type SmtpPreset, type SmtpSecurity, type SmtpSettingsInput } from "./smtpRules";
 export { notify, wasRecentlyNotified, listNotifications, markNotificationRead, listNotificationPreferences, setNotificationPreference } from "./notifications";
 export { search, maskRiskField } from "./search";
 export {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import type { SmtpPreset } from "@/modules/operations/service";
 import { removeSmtpSettingsAction, saveSmtpSettingsAction, testSmtpSettingsAction, type SmtpFormState } from "@/app/actions/smtp";
 import { PendingSubmitButton, SelectField, TextField } from "@/modules/ui";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,23 @@ function FieldError({ state, name }: { state: SmtpFormState; name: string }) {
 }
 
 /** The organization's outgoing mail server: one form, Save; Send test and Remove once saved. */
-export function SmtpSettingsForm({ saved }: { saved: Saved | null }) {
+export function SmtpSettingsForm({ saved, presets, initialPreset }: { saved: Saved | null; presets: SmtpPreset[]; initialPreset: string }) {
+  const [presetId, setPresetId] = useState(initialPreset);
+  const preset = presets.find((p) => p.id === presetId) ?? null;
+  // A provider fills in its server, security, port and (where it has one) user name; every field stays editable.
+  const applyPreset = (form: HTMLFormElement | null, id: string) => {
+    setPresetId(id);
+    const p = presets.find((x) => x.id === id);
+    if (!form || !p) return;
+    const set = (name: string, value: string) => {
+      const el = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null;
+      if (el) el.value = value;
+    };
+    set("host", p.host);
+    set("security", p.security);
+    set("port", String(p.port));
+    if (p.username) set("username", p.username);
+  };
   const [state, save] = useActionState(saveSmtpSettingsAction, initial);
   const [testState, test] = useActionState(testSmtpSettingsAction, initial);
   const [removeState, remove] = useActionState(removeSmtpSettingsAction, initial);
@@ -48,22 +65,33 @@ export function SmtpSettingsForm({ saved }: { saved: Saved | null }) {
     <div className="space-y-4">
       <form action={save} className="grid max-w-xl gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <TextField label="Server" name="host" required defaultValue={saved?.host ?? ""} placeholder="smtpout.secureserver.net" autoComplete="off" />
+          <SelectField label="Provider" name="provider" value={presetId} onChange={(e) => applyPreset(e.currentTarget.form, e.target.value)}>
+            {presets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+            <option value="">Other (enter the settings)</option>
+          </SelectField>
+          {preset?.note ? <p className="mt-1 text-xs text-muted-foreground">{preset.note}</p> : null}
+        </div>
+        <div className="sm:col-span-2">
+          <TextField label="Server" name="host" required defaultValue={saved?.host ?? preset?.host ?? ""} placeholder="smtp.example.com" autoComplete="off" />
           <FieldError state={state} name="host" />
         </div>
         <div>
-          <SelectField label="Security" name="security" defaultValue={saved?.security ?? "ssl"}>
+          <SelectField label="Security" name="security" defaultValue={saved?.security ?? preset?.security ?? "ssl"}>
             <option value="ssl">SSL/TLS (usually port 465)</option>
             <option value="starttls">STARTTLS (usually port 587)</option>
           </SelectField>
           <FieldError state={state} name="security" />
         </div>
         <div>
-          <TextField label="Port" name="port" inputMode="numeric" defaultValue={saved ? String(saved.port) : ""} placeholder="Default for the security" />
+          <TextField label="Port" name="port" inputMode="numeric" defaultValue={saved ? String(saved.port) : preset ? String(preset.port) : ""} placeholder="Default for the security" />
           <FieldError state={state} name="port" />
         </div>
         <div>
-          <TextField label="User name" name="username" defaultValue={saved?.username ?? ""} autoComplete="off" />
+          <TextField label="User name" name="username" defaultValue={saved?.username ?? preset?.username ?? ""} autoComplete="off" />
           <FieldError state={state} name="username" />
         </div>
         <div>
