@@ -3175,3 +3175,49 @@ property against a sample REST configuration); `restApi.test.ts` 13/13;
 untracked PNG imports of `app/welcome` that need Next's generated types;
 eslint clean on the changed files.
 
+## 2026-10-20 — The powershell driver and a Windows server connector (fix list item 19)
+
+Owner fix list item 19 asks for generic, detailed connectors that take any
+input parameters and return proper answers; this entry is the PowerShell one
+(REST, database and AD are separate pull requests).
+
+- `drivers/powershell.ts`: a new `powershell` driver. It runs a definition's
+  script on the organization's Windows server over WinRM (WS-Management,
+  HTTPS, Basic): create a shell, run `powershell.exe` (or `pwsh.exe` with an
+  `edition` setting of "PowerShell 7") with `-EncodedCommand`, receive
+  stdout/stderr until done (a timed-out Receive is asked again), then signal
+  and delete the shell, also on failure. Every WinRM request goes through
+  the Connector Gateway's metered fetch (`gateway.ts`), so the connection's
+  policies, allowed hosts, rate limit, SSRF guard and accounting apply; no
+  allowlist of `connector-boundary.test.ts` was widened (#20).
+- Parameters (text templates, numbers, true/false, lists of text) are sent
+  as base64 JSON and splatted into the script, so a value from a setting, a
+  record or a change target can never become code. Output is framed base64
+  JSON (`ConvertTo-Json`, `depth`), each object one record, `records` picks
+  a list, `/Date(…)/` becomes ISO 8601. A thrown error fails the run with its
+  message (ObjectNotFound is a 404 for `optional`); no result reports the
+  exit code and readable stderr (CLIXML reduced). Secrets stay in `auth`.
+- Read-only (#12): `powershellRules.ts` refuses read and test scripts that
+  use changing verbs, their aliases, `&`, dot-sourcing, `Add-Type`, script
+  blocks, ADSI change methods, file output or `-WhatIf:$false`, and reads
+  run with `$WhatIfPreference` on. Documented as a guard, not a sandbox.
+  Writes (`write.<op>.powershell`) must pass `{target.account}` (and
+  `{target.entitlement}`), run without -WhatIf, and are opt-in per
+  connection as before.
+- `definitions/windows-powershell.ts` (1.0.0): local accounts (SID, enabled,
+  last sign-in, expiry), local groups (Administrators admin; Backup, Server,
+  Account and Remote Management operators elevated) and membership; writes
+  disable an account and add/remove a group member, repeatable (already
+  done counts as done).
+- engine: `ConnectorDriverSession.runScript` and the write branch; types,
+  validator, type summary labels.
+
+Verified: `npm run typecheck` (only the existing missing `app/welcome` image
+errors of this checkout); `npx eslint modules/integrations/framework
+modules/integrations/gateway/gateway.ts` clean; `npx vitest run
+modules/integrations tests/architecture`: 45 files, 599 tests passed,
+including the new `powershell.test.ts` (31) and the windows-powershell
+contract block (8, all nine properties tested; pagination, retry and rate
+limiting have documented gaps). Not yet run against a real Windows server
+(`live.test.ts` needs a connections file with one); the WinRM exchange is
+tested against a fake endpoint.

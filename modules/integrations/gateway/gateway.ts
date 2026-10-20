@@ -9,6 +9,7 @@ import { LIMITS, type FetchLike } from "../framework/http";
 import { ldapDriver } from "../framework/drivers/ldap";
 import { sqlDriver } from "../framework/drivers/sql";
 import { mcpDriver } from "../framework/drivers/mcp";
+import { powershellDriver } from "../framework/drivers/powershell";
 import { fileDriver, type FileStoreFactory } from "../framework/drivers/file";
 import { connectorFileStore } from "../framework/files";
 import type { ConnectorDefinition } from "../framework/types";
@@ -34,7 +35,7 @@ import {
  * requirement 2026-10-10, "all such connections should pass through one
  * gateway which sits between WonderID and external world").
  *
- * - Outbound: the http, mcp, ldap and sql drivers are built only here, each
+ * - Outbound: the http, mcp, ldap, sql and powershell drivers are built only here, each
  *   wrapped so that every request first passes the connection's policies:
  *   the connection is not disabled, the per-run request budget is not
  *   spent, and the definition's rate limit (rateLimitPerSecond, a token
@@ -91,6 +92,11 @@ function rpcMethod(body: string | undefined): string {
   }
 }
 
+/** The WS-Management action of a WinRM request body (Create, Command, Receive…), for its operation label. */
+function wsmanAction(body: string | undefined): string {
+  return /<a:Action[^>]*>[^<]*\/(\w+)<\/a:Action>/.exec(body ?? "")?.[1] ?? "request";
+}
+
 export class GatewaySession {
   /** The drivers a DefinitionConnector runs on: every one of them metered by this session. */
   readonly drivers: DriverFactories;
@@ -112,6 +118,8 @@ export class GatewaySession {
     this.drivers = {
       http: this.withDefinition(httpDriver(this.meteredFetch("http"))),
       mcp: this.withDefinition(mcpDriver(this.meteredFetch("mcp"))),
+      // PowerShell over WinRM: every WS-Management request through the metered fetch.
+      powershell: this.withDefinition(powershellDriver(this.meteredFetch("powershell"))),
       ldap: this.meteredDriver("ldap", opts.socketDrivers?.ldap ?? ldapDriver),
       sql: this.meteredDriver("sql", opts.socketDrivers?.sql ?? sqlDriver),
       // CSV files: an address is fetched through the metered fetch (policies, guard, 10 MB cap);
@@ -190,11 +198,12 @@ export class GatewaySession {
   }
 
   /** HTTP and MCP: every request through the policies above, then guardedFetch. */
-  private meteredFetch(kind: "http" | "mcp" | "file"): FetchLike {
+  private meteredFetch(kind: "http" | "mcp" | "file" | "powershell"): FetchLike {
     const transport = this.opts.transport ?? guardedFetch;
     return async (url, init) => {
       const host = hostOf(url);
-      const operation = kind === "mcp" ? operationLabel("mcp", rpcMethod(init.body)) : operationLabel(kind, init.method ?? "GET");
+      const operation =
+        kind === "mcp" ? operationLabel("mcp", rpcMethod(init.body)) : kind === "powershell" ? operationLabel("powershell", wsmanAction(init.body)) : operationLabel(kind, init.method ?? "GET");
       await this.admit(operation, host);
       const started = this.now();
       const bytesOut = init.body ? Buffer.byteLength(init.body, "utf8") : 0;

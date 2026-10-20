@@ -190,7 +190,7 @@ All information from your systems reaches WonderID through **connections**. Ther
 | HR | Frappe HR |
 | Directories and identity providers | Active Directory (people, accounts, managed service accounts, groups; can also add and remove group members), LDAP directory (which can also add and remove group members), Keycloak, Saviynt, and any identity provider or HR system that pushes people over SCIM 2.0 |
 | Applications | ERPNext, Gitea, Mattermost, Nextcloud, Zendesk, and any application with a SCIM 2.0 service (which can also add and remove group members, disable and create users) |
-| Infrastructure and data | PostgreSQL, Kubernetes, OpenBao (secrets) |
+| Infrastructure and data | PostgreSQL, Kubernetes, OpenBao (secrets), Windows servers over PowerShell (local accounts and groups; can also disable accounts and add and remove group members) |
 | AI | MCP server, Runtime Gateway |
 | Anything else | Generic REST API (any REST/JSON API, set up in the connection's own settings), Webhook (signed events from any system), CSV files |
 
@@ -201,7 +201,7 @@ All information from your systems reaches WonderID through **connections**. Ther
 - **Same safety as every type:** requests only go to the connection's own address, credentials are only sent in the sign-in, and a mistake is reported with its box and line when you save.
 
 **Your own connection types**
-- An integrator can describe any system with an HTTP, LDAP, SQL, MCP or file interface: no code, just a definition.
+- An integrator can describe any system with an HTTP, LDAP, SQL, MCP, PowerShell or file interface: no code, just a definition. A PowerShell type runs its own scripts on a Windows server, with any parameters, and reads what they return.
 - **Checked as you type:** the editor checks the definition and can try it against the real system before saving.
 - **Form or JSON:** write it in a guided form (basics, settings, sign-in, one kind of record at a time) or as JSON; both edit the same definition. After "Try it", field paths can be picked from the sample response.
 - **Sharing and upgrading:** download a connection type as a file and open it in another organization's editor. When a newer version is published, a connection shows "available"; its preview lists what changes (settings, sign-in, what it reads and how fields are mapped) before you upgrade. An upgrade never allows more changes in the system than before, and the next sync reads everything again.
@@ -705,6 +705,7 @@ Newest first.
 |---|---|
 | 20 Oct 2026 | New built-in connection type, Generic REST API: connect any REST/JSON API by describing its sign-in, requests, paging, field mappings and changes in the connection's own settings, with no connection type to write. |
 | 20 Oct 2026 | Active Directory is a built-in connection type: people with their managers, accounts (disabled, privileged, expiring, last sign-in), managed service accounts, security and distribution groups and memberships; it can add and remove group members once changes are turned on. |
+| 20 Oct 2026 | New connection type: Windows server (PowerShell) reads a server's local accounts, local groups and their members over WinRM, and can disable an account and add or remove group members once changes are turned on. Integrators can write their own PowerShell connection types, with scripts that take any parameters. |
 | 20 Oct 2026 | An application's page has two new tabs: Policies (the request policies that apply to it and who approves under each, with a link to change them) and Audit History (the latest changes to the application, its entitlements and entitlement types). |
 | 20 Oct 2026 | The Email (SMTP) page has a Provider list (GoDaddy, Gmail, Microsoft 365, Outlook.com, SendGrid, Mailgun, Zoho Mail and others) that fills in the server, security and port. |
 | 20 Oct 2026 | Request Policies is simpler: choosing a scope opens its policy straight away, and the form has three parts (who can request, approval, how long access lasts). One "Approved by" choice lists your approval workflows and the built-in routes, replacing three separate fields. Each policy's name opens its form. |

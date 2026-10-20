@@ -124,6 +124,7 @@ import { ldapDriver } from "./drivers/ldap";
 import { sqlDriver } from "./drivers/sql";
 import { fileDriver, type ConnectorFileStore, type FileFetch, type StoredFile } from "./drivers/file";
 import { mcpDriver } from "./drivers/mcp";
+import { powershellDriver } from "./drivers/powershell";
 import { eventRecords, mapRuntimeEvent, uploadTarget, verifySender, MAX_EVENTS_PER_REQUEST } from "./receiveRules";
 import { SCIM_MAX_RESULTS, SCIM_USER_SCHEMA, mappingScope, scimPage } from "./scimRules";
 import { openGateway } from "../gateway/gateway";
@@ -142,6 +143,7 @@ const TESTED_BY_DRIVER: Record<ConnectorDriver, readonly ContractProperty[]> = {
   sql: ["authentication", "discovery", "pagination", "partial_failure", "retry", "rate_limiting", "idempotency", "credential_rotation", "traceability"],
   file: ["authentication", "discovery", "pagination", "partial_failure", "retry", "rate_limiting", "idempotency", "credential_rotation", "traceability"],
   mcp: ["authentication", "discovery", "pagination", "partial_failure", "retry", "rate_limiting", "idempotency", "credential_rotation", "traceability"],
+  powershell: ["authentication", "discovery", "pagination", "partial_failure", "retry", "rate_limiting", "idempotency", "credential_rotation", "traceability"],
   none: ["authentication", "discovery", "idempotency", "credential_rotation", "traceability"],
 };
 /** Receive-only connectors with more to test than the driver's default. */
@@ -174,6 +176,9 @@ export const GAPS: readonly { scope: string; property: ContractProperty; reason:
   { scope: "driver:file", property: "pagination", reason: "One CSV per kind, at most 10 MB; nothing to page." },
   { scope: "driver:file", property: "retry", reason: "A failed download is not retried; the kind fails for the run." },
   { scope: "driver:file", property: "rate_limiting", reason: "Gateway pacing on addresses only; a 429 fails the read and Retry-After is not read." },
+  { scope: "driver:powershell", property: "pagination", reason: "One script run per kind returns everything, cut at maxRecords; a result over the limit is reported truncated. A script that needs paging does it itself." },
+  { scope: "driver:powershell", property: "retry", reason: "A failed script or WinRM request is not retried; the kind fails for the run. Only a Receive that timed out with nothing new is asked again." },
+  { scope: "driver:powershell", property: "rate_limiting", reason: "Gateway pacing on every WinRM request only; WinRM's own quota faults fail the run." },
   { scope: "driver:mcp", property: "retry", reason: "A failed JSON-RPC call is not retried; the kind fails for the run." },
   { scope: "driver:mcp", property: "rate_limiting", reason: "Gateway pacing only; a 429 fails the read and Retry-After is not read." },
   { scope: "driver:none", property: "retry", reason: "Receive-only: the sender retries on a 5xx answer. Redelivery is deduplicated by the event's externalId in receive.ts, against the database (not unit-tested here)." },
@@ -1215,7 +1220,7 @@ describe("contract: sql connector postgresql", () => {
     expect(capabilitiesOf(sqlDef)).toMatchObject({ importAccounts: true, importEntitlements: true, importAccess: true, provision: false, deprovision: false });
     expect(Object.values(writeCapabilitiesOf(sqlDef)).some(Boolean)).toBe(false);
     const writing = { ...sqlDef, write: { revoke_access: { request: { method: "DELETE", path: "/{target.account}/{target.entitlement}" } } } };
-    expect(validateDefinition(writing).issues.map((i) => i.message).join()).toMatch(/only an http or ldap connector can write/);
+    expect(validateDefinition(writing).issues.map((i) => i.message).join()).toMatch(/only an http, ldap or powershell connector can write/);
   });
 
   it("pagination: one statement cut at the record limit; a result at the limit is truncated", async () => {
@@ -1275,6 +1280,177 @@ describe("contract: sql connector postgresql", () => {
     const grants = await c.importKind("access_grant");
     expect(grants).toEqual([{ externalId: "ana:finance", raw: { member: "ana", role: "finance" }, normalized: expect.objectContaining({ accountExternalId: "ana", entitlementExternalId: "finance" }) }]);
     expect((await c.importKind("account"))[0].raw).toEqual(anaRow);
+  });
+});
+
+// ---------------------------------------------------------------- powershell (WinRM)
+
+const psDef = BUILTIN_DEFINITIONS.find((d) => d.key === "windows-powershell")!;
+
+type PsRun = { script: string; params: Json; readOnly: boolean; executable: string };
+type PsCall = { action: string; authorization: string; url: string };
+
+/**
+ * A fake WinRM endpoint: opens a shell, decodes each command's script and
+ * parameters, answers with what `answer` returns (records, or a thrown
+ * PowerShell error), after one "timed out" Receive when `slow`.
+ */
+function winrm(answer: (run: PsRun) => { output: unknown[] } | { error: string; category?: string }, opts: { status?: number; slow?: boolean } = {}) {
+  const calls: PsCall[] = [];
+  const runs: PsRun[] = [];
+  let pending: string | null = null;
+  let waited = false;
+  const fetch: FetchLike = async (url, init) => {
+    const body = init.body ?? "";
+    const action = /<a:Action[^>]*>[^<]*\/(\w+)<\/a:Action>/.exec(body)?.[1] ?? "?";
+    calls.push({ action, authorization: init.headers?.Authorization ?? "", url });
+    if (opts.status) return new Response("", { status: opts.status });
+    const soap = (inner: string) => new Response(`<s:Envelope xmlns:s="x" xmlns:rsp="y"><s:Body>${inner}</s:Body></s:Envelope>`, { status: 200 });
+    if (action === "Create") return soap(`<rsp:Shell><rsp:ShellId>SHELL-1</rsp:ShellId></rsp:Shell>`);
+    if (action === "Command") {
+      const exe = /<rsp:Command>([^<]+)</.exec(body)![1];
+      const ps = Buffer.from(/-EncodedCommand (\S+)</.exec(body)![1], "base64").toString("utf16le");
+      const run: PsRun = {
+        script: ps.slice(ps.indexOf("@(& {\n") + 6, ps.indexOf("\n  } @Params)")),
+        params: JSON.parse(Buffer.from(/FromBase64String\('([^']*)'\)/.exec(ps)![1], "base64").toString("utf8")),
+        readOnly: ps.includes("$WhatIfPreference = $true"),
+        executable: exe,
+      };
+      runs.push(run);
+      const a = answer(run);
+      const result = "output" in a ? { ok: true, output: a.output } : { ok: false, error: a.error, category: a.category ?? "NotSpecified", errorId: "X" };
+      pending = `WARNING: noise\n<<WONDERID-RESULT>>${Buffer.from(JSON.stringify(result)).toString("base64")}<<WONDERID-END>>\n`;
+      waited = false;
+      return soap(`<rsp:CommandResponse><rsp:CommandId>CMD-1</rsp:CommandId></rsp:CommandResponse>`);
+    }
+    if (action === "Receive") {
+      if (opts.slow && !waited) {
+        waited = true;
+        return new Response(`<s:Envelope><s:Body><s:Fault><s:Reason><s:Text>timed out</s:Text></s:Reason><s:Detail><f:WSManFault Code="2150858793"><f:Message>The WS-Management service cannot complete the operation within the time specified in OperationTimeout.</f:Message></f:WSManFault></s:Detail></s:Fault></s:Body></s:Envelope>`, { status: 500 });
+      }
+      const text = Buffer.from(pending ?? "");
+      const half = Math.floor(text.length / 2);
+      return soap(
+        `<rsp:ReceiveResponse><rsp:Stream Name="stdout" CommandId="CMD-1">${text.subarray(0, half).toString("base64")}</rsp:Stream>` +
+          `<rsp:Stream Name="stdout" CommandId="CMD-1">${text.subarray(half).toString("base64")}</rsp:Stream><rsp:Stream Name="stdout" CommandId="CMD-1" End="true"></rsp:Stream>` +
+          `<rsp:CommandState CommandId="CMD-1" State="http://schemas.microsoft.com/wbem/wsman/1/windows/shell/CommandState/Done"><rsp:ExitCode>0</rsp:ExitCode></rsp:CommandState></rsp:ReceiveResponse>`,
+      );
+    }
+    return soap("");
+  };
+  return { fetch, calls, runs };
+}
+
+describe("contract: powershell connector windows-powershell", () => {
+  const settings = { url: "https://srv.contract.test:5986/wsman" };
+  const config = builtin(psDef, settings);
+  const secrets = (tag: string) => ({ username: `svc${tag}`, password: `Pw${tag}Zq9` });
+  const ana = { sid: "S-1-5-21-1-1001", name: "ana", fullName: "Ana", description: null, enabled: true, lastLogon: "/Date(1760000000000)/", passwordLastSet: null, expires: null };
+  const bo = { sid: "S-1-5-21-1-1002", name: "bo", fullName: "", description: null, enabled: false, lastLogon: null, passwordLastSet: null, expires: null };
+  const admins = { sid: "S-1-5-32-544", name: "Administrators", description: "Full control" };
+  const records: Record<string, unknown[]> = {
+    test: ["Administrators"],
+    account: [ana, bo],
+    entitlement: [admins],
+    access_grant: [{ group: admins.sid, member: ana.sid, memberName: "SRV\\ana", objectClass: "User", source: "Local" }],
+  };
+  const kindOf = (script: string) => (/Get-LocalGroupMember/.test(script) ? "access_grant" : /Get-LocalUser/.test(script) ? "account" : /S-1-5-32-544'/.test(script) ? "test" : /Get-LocalGroup/.test(script) ? "entitlement" : "write");
+  const standard = (run: PsRun) => ({ output: records[kindOf(run.script)] ?? [] });
+  const connect = async (fake: ReturnType<typeof winrm>, tag = "A", def: ConnectorDefinition = psDef) => {
+    const c = new DefinitionConnector({ powershell: powershellDriver(fake.fetch) });
+    await c.authenticate(def === psDef ? config : custom(def, settings), JSON.stringify(secrets(tag)));
+    return c;
+  };
+
+  it("authentication: signs in with Basic over the connection's https address; a refused sign-in fails without the password", async () => {
+    const fake = winrm(standard);
+    expect(await (await connect(fake)).testConnection()).toEqual({ ok: true });
+    expect(fake.calls.every((call) => call.url === settings.url && call.authorization === `Basic ${Buffer.from("svcA:PwAZq9").toString("base64")}`)).toBe(true);
+    const denied = await (await connect(winrm(standard, { status: 401 }))).testConnection();
+    expect(denied).toMatchObject({ ok: false, message: expect.stringMatching(/refused the user name or password/) });
+    expect(denied.message).not.toContain("PwAZq9");
+  });
+
+  it("discovery: the test runs read-only; reads are declared, changes too, and a read script that changes something is refused", async () => {
+    const fake = winrm(standard);
+    await (await connect(fake)).testConnection();
+    expect(fake.runs).toEqual([expect.objectContaining({ readOnly: true, executable: "powershell.exe", script: expect.stringContaining("Get-LocalGroup -SID 'S-1-5-32-544'") })]);
+    expect(fake.calls.map((call) => call.action)).toEqual(["Create", "Command", "Receive", "Signal", "Delete"]);
+    expect(capabilitiesOf(psDef)).toMatchObject({ importAccounts: true, importEntitlements: true, importAccess: true, provision: false, deprovision: false });
+    expect(writeCapabilitiesOf(psDef)).toMatchObject({ disableAccount: true, revokeAccess: true, grantAccess: true, createAccount: false });
+    const changing = structuredClone(psDef);
+    specsOf(changing, "account")[0].powershell!.script = "Get-LocalUser | Remove-LocalUser";
+    expect(validateDefinition(changing).issues.map((i) => i.message).join()).toMatch(/Remove-LocalUser changes something/);
+  });
+
+  it("pagination: one script run per kind, cut at the record limit; a result over the limit is truncated", async () => {
+    const c = await connect(winrm(standard));
+    expect(await c.importKind("account")).toHaveLength(2);
+    expect(c.readReport("account").truncated).toBe(false);
+    const capped = structuredClone(psDef);
+    specsOf(capped, "account").forEach((s) => (s.maxRecords = 1));
+    const d = await connect(winrm(standard), "A", capped);
+    expect(await d.importKind("account")).toHaveLength(1);
+    expect(d.readReport("account").truncated).toBe(true);
+    expect(gapFor(psDef, "pagination")).toBeDefined();
+  });
+
+  it("partial failure and retry: an error the script throws fails only its kind, once, and the shell is still closed", async () => {
+    const fake = winrm((run) => (kindOf(run.script) === "access_grant" ? { error: "Failed to compare two elements in the array." } : standard(run)));
+    const c = await connect(fake);
+    expect(await c.importKind("account")).toHaveLength(2);
+    await expect(c.importKind("access_grant")).rejects.toThrow(/The PowerShell script failed: Failed to compare/);
+    expect(fake.runs.filter((r) => kindOf(r.script) === "access_grant")).toHaveLength(1);
+    expect(fake.calls.at(-1)?.action).toBe("Delete");
+    // A Receive with nothing new yet is asked again, not a failure.
+    const slow = winrm(standard, { slow: true });
+    expect(await (await connect(slow)).importKind("account")).toHaveLength(2);
+    expect(slow.calls.filter((call) => call.action === "Receive")).toHaveLength(2);
+    expect(gapFor(psDef, "retry")).toBeDefined();
+  });
+
+  it("rate limiting: the Gateway paces every WinRM request", async () => {
+    const fake = winrm(standard);
+    const sleeps = await gatewayRun({ transport: (url, init) => fake.fetch(url, init) }, config, JSON.stringify(secrets("A")), (c) => c.testConnection());
+    const rate = psDef.rateLimitPerSecond ?? 10;
+    expect(fake.calls).toHaveLength(5);
+    expect(sleeps).toEqual([1, 2, 3, 4].map((k) => Math.ceil((k / rate) * 1000)));
+  });
+
+  it("idempotency: reads run with -WhatIf on; changes run without it, are repeatable and pass the target as a parameter", async () => {
+    const fake = winrm(standard);
+    const c = await connect(fake);
+    await c.importKind("account");
+    await c.write("disable_account", { account: bo.sid }, "attempt-0001");
+    await c.write("revoke_access", { account: ana.sid, entitlement: admins.sid }, "attempt-0002");
+    expect(fake.runs.map((r) => [r.readOnly, r.params])).toEqual([
+      [true, { Exclude: "DefaultAccount,WDAGUtilityAccount" }],
+      [false, { Account: bo.sid }],
+      [false, { Group: admins.sid, Account: ana.sid }],
+    ]);
+    expect(fake.runs[2].script).toMatch(/catch \[Microsoft\.PowerShell\.Commands\.MemberNotFoundException\]/);
+    expect(["disable_account", "revoke_access", "grant_access"].every((op) => writeIsRepeatable(psDef, op as DefinitionWriteOperation))).toBe(true);
+    const twice = await connect(winrm((run) => (kindOf(run.script) === "account" ? { output: [ana, ana] } : standard(run))));
+    expect(await twice.importKind("account")).toHaveLength(1);
+  });
+
+  it("credential rotation: the next session signs in with the new secrets", async () => {
+    const fake = winrm(standard);
+    const c = await connect(fake, "A");
+    await c.testConnection();
+    await c.close();
+    await c.authenticate(config, JSON.stringify(secrets("B")));
+    await c.testConnection();
+    expect(fake.calls.at(-1)?.authorization).toBe(`Basic ${Buffer.from("svcB:PwBZq9").toString("base64")}`);
+  });
+
+  it("traceability: records are keyed by SID and keep the script's output, dates as ISO 8601", async () => {
+    const c = await connect(winrm(standard));
+    const [first] = await c.importKind("account");
+    expect(first).toEqual({ externalId: ana.sid, raw: { ...ana, lastLogon: "2025-10-09T08:53:20.000Z" }, normalized: expect.objectContaining({ username: "ana", status: "active" }) });
+    const grants = await c.importKind("access_grant");
+    expect(grants.map((g) => [g.externalId, g.normalized!.accountExternalId, g.normalized!.entitlementExternalId])).toEqual([[`${admins.sid}|${ana.sid}`, ana.sid, admins.sid]]);
+    expect((await c.importKind("entitlement"))[0].normalized).toMatchObject({ privilegeLevel: "admin" });
   });
 });
 
@@ -1609,7 +1785,7 @@ describe("contract: every built-in is covered for every property, or has a docum
   });
 
   it("each non-http built-in has its own block above", () => {
-    const covered = new Set(["ldap-directory", "active-directory", "postgresql", "csv-file", "mcp-server", "webhook", "runtime-gateway", "scim-inbound"]);
+    const covered = new Set(["ldap-directory", "active-directory", "postgresql", "windows-powershell", "csv-file", "mcp-server", "webhook", "runtime-gateway", "scim-inbound"]);
     expect(BUILTIN_DEFINITIONS.filter((d) => d.driver !== "http" && !covered.has(d.key)).map((d) => d.key)).toEqual([]);
   });
 });
