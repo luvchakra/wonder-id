@@ -54,3 +54,25 @@ export function checkSmtpSettings(form: Record<string, string | undefined>, hasS
 export function smtpFrom(fromEmail: string, fromName: string | null): string {
   return fromName ? `"${fromName}" <${fromEmail}>` : fromEmail;
 }
+
+/**
+ * Common providers, to fill in the server settings (owner request,
+ * 2026-10-20). Only a starting point: every field stays editable.
+ */
+export type SmtpPreset = { id: string; label: string; host: string; security: SmtpSecurity; port: number; username?: string; note?: string };
+
+export const SMTP_PRESETS: SmtpPreset[] = [
+  { id: "godaddy", label: "GoDaddy (Workspace Email)", host: "smtpout.secureserver.net", security: "ssl", port: 465, note: "Use your full e-mail address as the user name." },
+  { id: "gmail", label: "Gmail / Google Workspace", host: "smtp.gmail.com", security: "starttls", port: 587, note: "Use an app password, not your Google password." },
+  { id: "microsoft365", label: "Microsoft 365 / Exchange Online", host: "smtp.office365.com", security: "starttls", port: 587, note: "SMTP AUTH must be turned on for the mailbox." },
+  { id: "outlook", label: "Outlook.com", host: "smtp-mail.outlook.com", security: "starttls", port: 587 },
+  { id: "resend", label: "Resend", host: "smtp.resend.com", security: "ssl", port: 465, username: "resend", note: "The password is a Resend API key." },
+  { id: "sendgrid", label: "SendGrid", host: "smtp.sendgrid.net", security: "starttls", port: 587, username: "apikey", note: "The password is a SendGrid API key." },
+  { id: "mailgun", label: "Mailgun", host: "smtp.mailgun.org", security: "starttls", port: 587 },
+  { id: "zoho", label: "Zoho Mail", host: "smtp.zoho.com", security: "ssl", port: 465 },
+];
+
+/** The preset a saved server matches, by host; none for a custom server. */
+export function presetForHost(host: string | null | undefined): SmtpPreset | null {
+  return SMTP_PRESETS.find((p) => p.host === host?.trim().toLowerCase()) ?? null;
+}

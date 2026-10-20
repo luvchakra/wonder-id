@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkSmtpSettings, smtpFrom } from "./smtpRules";
+import { checkSmtpSettings, presetForHost, SMTP_PRESETS, smtpFrom } from "./smtpRules";
 
 const valid = { host: "smtpout.secureserver.net", security: "ssl", port: "465", username: "connect@example.com", password: "secret", fromEmail: "connect@example.com", fromName: "Example IT", enabled: "on" };
 
@@ -47,5 +47,20 @@ describe("checkSmtpSettings (owner test feedback item 14)", () => {
     expect(r.ok && r.value.fromName).toBe("EvilBcc: x@y.z");
     expect(smtpFrom("a@b.example", "Acme")).toBe('"Acme" <a@b.example>');
     expect(smtpFrom("a@b.example", null)).toBe("a@b.example");
+  });
+});
+
+describe("provider presets", () => {
+  it("each preset is a valid server", () => {
+    for (const p of SMTP_PRESETS) {
+      const r = checkSmtpSettings({ host: p.host, security: p.security, port: String(p.port), fromEmail: "a@b.co", enabled: "on" }, false);
+      expect(r.ok, p.id).toBe(true);
+    }
+  });
+
+  it("matches a saved server by host", () => {
+    expect(presetForHost(" SMTP.gmail.com ")?.id).toBe("gmail");
+    expect(presetForHost("mail.example.com")).toBeNull();
+    expect(presetForHost(null)).toBeNull();
   });
 });

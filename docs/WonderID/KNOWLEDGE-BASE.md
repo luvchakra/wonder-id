@@ -697,6 +697,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 20 Oct 2026 | The Email (SMTP) page has a Provider list (GoDaddy, Gmail, Microsoft 365, Outlook.com, Resend, SendGrid, Mailgun, Zoho Mail) that fills in the server, security and port. |
 | 20 Oct 2026 | Request Policies is simpler: choosing a scope opens its policy straight away, and the form has three parts (who can request, approval, how long access lasts). One "Approved by" choice lists your approval workflows and the built-in routes, replacing three separate fields. Each policy's name opens its form. |
 | 20 Oct 2026 | Entitlements and Onboard Application moved to Administration › Applications, and Request Policies to Administration › Policies & Controls, since configuring them is an administrator's job. Their pages and who can open them are unchanged. |
 | 20 Oct 2026 | An approval workflow's page links to the next step: each request policy that uses it opens at its own form, an unused workflow links to setting a request policy, and a line under the levels links to where its approvers are set (managers, owners, groups, access managers). |
