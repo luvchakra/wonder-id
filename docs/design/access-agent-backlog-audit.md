@@ -4820,7 +4820,7 @@ not make sense anymore, redesign this and update."
   (`?app=…#set-policy`); under Approved by, a link to Approval workflows
   (or to create one when none exist).
 
-Controls on the form: 15 before (13 fields, Choose, Save), 13 after.
+Controls on the form (with an application chosen): 18 before, 16 after plus one link.
 Verified: `npx vitest run modules/access-governance/requestRules.test.ts`
 (17 passed, 2 new), eslint on the changed files, typecheck clean apart from
 the known `app/welcome` image errors.
