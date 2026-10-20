@@ -20,6 +20,7 @@ type Snapshot = {
   accessGrant?: { application?: string; entitlementName?: string } | null;
   package?: { name?: string; resource?: { applicationName?: string; entitlementName?: string | null } };
   catalogEntitlement?: { name?: string; application?: { name?: string } };
+  membership?: { package?: { name?: string } };
 };
 
 export type RevocationRow = {
@@ -29,7 +30,7 @@ export type RevocationRow = {
   subject: string;
   access: string;
   decidedAt: string;
-  how: "removal_request" | "role_removed" | "grant_revoked" | "package_resource_removed" | "entitlement_disabled";
+  how: "removal_request" | "role_removed" | "grant_revoked" | "package_resource_removed" | "entitlement_disabled" | "role_assignment_ended";
   outcome: "verified" | "removed_unverified" | "pending" | "failed" | "removed";
   dueAt: string | null;
   verifiedAt: string | null;
@@ -39,7 +40,7 @@ export async function listRevocations(tenantId: string, limit = 1000): Promise<R
   const admin = supabaseServiceRole();
   const { data: items, error } = await admin
     .from("certification_items")
-    .select("id, tenant_id, campaign_id, agent_id, identity_id, role_source, package_resource_id, entitlement_id, snapshot, certification_campaigns(name)")
+    .select("id, tenant_id, campaign_id, agent_id, identity_id, role_source, package_resource_id, package_assignment_id, entitlement_id, snapshot, certification_campaigns(name)")
     .eq("tenant_id", tenantId)
     .eq("status", "decided")
     .order("updated_at", { ascending: false })
@@ -59,7 +60,7 @@ export async function listRevocations(tenantId: string, limit = 1000): Promise<R
   const requestIds = picked
     .filter((d) => {
       const item = byId.get(d.item_id as string)!;
-      return !item.agent_id && !item.role_source && !item.package_resource_id && !item.entitlement_id && d.remediation_id;
+      return !item.agent_id && !item.role_source && !item.package_resource_id && !item.package_assignment_id && !item.entitlement_id && d.remediation_id;
     })
     .map((d) => d.remediation_id as string);
   const outcomes = await removalOutcomes(tenantId, requestIds);
@@ -69,11 +70,14 @@ export async function listRevocations(tenantId: string, limit = 1000): Promise<R
     const subject = snap.person?.displayName ?? snap.package?.name ?? snap.catalogEntitlement?.application?.name ?? (item.agent_id as string | null) ?? "";
     const access =
       snap.role?.displayName ??
+      snap.membership?.package?.name ??
       snap.catalogEntitlement?.name ??
       (snap.package?.resource ? [snap.package.resource.applicationName, snap.package.resource.entitlementName].filter(Boolean).join(" · ") : [snap.accessGrant?.application, snap.accessGrant?.entitlementName].filter(Boolean).join(" · "));
     const base = { itemId: item.id as string, campaignId: item.campaign_id as string, campaignName: (item.certification_campaigns as { name?: string } | null)?.name ?? "", subject, access, decidedAt: d.decided_at as string };
     if (item.entitlement_id) return { ...base, how: "entitlement_disabled" as const, outcome: "removed" as const, dueAt: null, verifiedAt: d.decided_at as string };
     if (item.package_resource_id) return { ...base, how: "package_resource_removed" as const, outcome: "removed" as const, dueAt: null, verifiedAt: d.decided_at as string };
+    // COMPLIANCE-P0-15: a business-role assignment ends when the decision is recorded; its access becomes removal work in Access.
+    if (item.package_assignment_id) return { ...base, how: "role_assignment_ended" as const, outcome: "removed" as const, dueAt: null, verifiedAt: d.decided_at as string };
     if (item.role_source) return { ...base, how: "role_removed" as const, outcome: "removed" as const, dueAt: null, verifiedAt: d.decided_at as string };
     if (item.agent_id) return { ...base, how: "grant_revoked" as const, outcome: "removed" as const, dueAt: null, verifiedAt: d.decided_at as string };
     const o = d.remediation_id ? outcomes.get(d.remediation_id as string) : undefined;

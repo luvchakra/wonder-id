@@ -26,6 +26,9 @@ export type ReviewableGrant = {
   applicationId: string;
   applicationName: string;
   applicationOwnerIdentityId: string | null;
+  /** COMPLIANCE-P0-15: the application's secondary (technical) owner, and the entitlement's own owner. */
+  applicationTechnicalOwnerIdentityId: string | null;
+  entitlementOwnerIdentityId: string | null;
   entitlementId: string;
   entitlementName: string;
   privilegeLevel: string;
@@ -34,15 +37,20 @@ export type ReviewableGrant = {
 /**
  * Access people hold (accounts linked to an identity, not an agent): not
  * revoked, not pending or merely marked done, still reported by the source.
+ * COMPLIANCE-P0-15: optionally one entitlement or one person, and without
+ * the access that comes from an access package (a review of the package
+ * assignment covers it).
  */
-export async function listIdentityGrantsForReview(tenantId: string, filter: { applicationId?: string | null; privilegedOnly?: boolean } = {}): Promise<ReviewableGrant[]> {
+export type GrantReviewFilter = { applicationId?: string | null; entitlementId?: string | null; identityId?: string | null; privilegedOnly?: boolean; excludePackageGrants?: boolean };
+export async function listIdentityGrantsForReview(tenantId: string, filter: GrantReviewFilter = {}): Promise<ReviewableGrant[]> {
+  for (const v of [filter.applicationId, filter.entitlementId, filter.identityId]) if (v && !UUID_RE.test(v)) return [];
   const admin = supabaseServiceRole();
   const out: ReviewableGrant[] = [];
   for (let from = 0; ; from += 1000) {
     let q = admin
       .from("access_grants")
       .select(
-        "id, tenant_id, account_id, entitlement_id, accounts!inner(id, tenant_id, identity_id, agent_id, application_id, external_account_ref, status), entitlements!inner(id, name, privilege_level, application_id, applications!inner(id, name, display_name, business_owner_identity_id))",
+        "id, tenant_id, account_id, entitlement_id, accounts!inner(id, tenant_id, identity_id, agent_id, application_id, external_account_ref, status), entitlements!inner(id, name, privilege_level, application_id, owner_identity_id, applications!inner(id, name, display_name, business_owner_identity_id, technical_owner_identity_id))",
       )
       .eq("tenant_id", tenantId)
       .is("revoked_at", null)
@@ -53,6 +61,9 @@ export async function listIdentityGrantsForReview(tenantId: string, filter: { ap
       .neq("accounts.status", "pending");
     if (filter.applicationId) q = q.eq("entitlements.application_id", filter.applicationId);
     if (filter.privilegedOnly) q = q.in("entitlements.privilege_level", ["elevated", "admin"]);
+    if (filter.entitlementId) q = q.eq("entitlement_id", filter.entitlementId);
+    if (filter.identityId) q = q.eq("accounts.identity_id", filter.identityId);
+    if (filter.excludePackageGrants) q = q.is("access_package_assignment_item_id", null);
     const { data, error } = await q.order("id").range(from, from + 999);
     if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
     for (const r of (data ?? []) as Row[]) {
@@ -68,12 +79,69 @@ export async function listIdentityGrantsForReview(tenantId: string, filter: { ap
         applicationId: app.id as string,
         applicationName: ((app.display_name as string | null) || (app.name as string)) ?? "",
         applicationOwnerIdentityId: (app.business_owner_identity_id as string | null) ?? null,
+        applicationTechnicalOwnerIdentityId: (app.technical_owner_identity_id as string | null) ?? null,
+        entitlementOwnerIdentityId: (ent.owner_identity_id as string | null) ?? null,
         entitlementId: ent.id as string,
         entitlementName: ent.name as string,
         privilegeLevel: ent.privilege_level as string,
       });
     }
     if ((data ?? []).length < 1000 || out.length >= 20_000) break;
+  }
+  return out;
+}
+
+export type ReviewableMembership = {
+  assignmentId: string;
+  identityId: string;
+  packageId: string;
+  packageRef: number | null;
+  packageName: string;
+  ownerIdentityId: string | null;
+  birthright: boolean;
+  source: string;
+  expiresAt: string | null;
+  resources: number;
+  /** An application the package gives access to, when the review is about one application. */
+  applicationIds: string[];
+};
+
+/**
+ * COMPLIANCE-P0-15: live assignments of business roles (access packages)
+ * to people: for one package, one person, or the packages that include one
+ * application. Service role, filtered by tenant (§14).
+ */
+export async function listPackageAssignmentsForReview(tenantId: string, filter: { packageId?: string | null; identityId?: string | null; applicationId?: string | null }): Promise<ReviewableMembership[]> {
+  for (const v of [filter.packageId, filter.identityId, filter.applicationId]) if (v && !UUID_RE.test(v)) return [];
+  const admin = supabaseServiceRole();
+  let q = admin
+    .from("access_package_assignments")
+    .select("id, tenant_id, identity_id, package_id, source, expires_at, access_packages!inner(id, tenant_id, ref, name, owner_identity_id, birthright_status, access_package_resources(application_id))")
+    .eq("tenant_id", tenantId)
+    .in("status", ["provisioning", "active", "partially_failed"]);
+  if (filter.packageId) q = q.eq("package_id", filter.packageId);
+  if (filter.identityId) q = q.eq("identity_id", filter.identityId);
+  const { data, error } = await q.order("id").limit(20_000);
+  if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
+  const out: ReviewableMembership[] = [];
+  for (const r of (data ?? []) as Row[]) {
+    const pkg = r.access_packages as unknown as Row;
+    if (r.tenant_id !== tenantId || pkg.tenant_id !== tenantId) continue;
+    const applicationIds = [...new Set(((pkg.access_package_resources as Row[] | null) ?? []).map((x) => x.application_id as string).filter(Boolean))];
+    if (filter.applicationId && !applicationIds.includes(filter.applicationId)) continue;
+    out.push({
+      assignmentId: r.id as string,
+      identityId: r.identity_id as string,
+      packageId: pkg.id as string,
+      packageRef: (pkg.ref as number | null) ?? null,
+      packageName: pkg.name as string,
+      ownerIdentityId: (pkg.owner_identity_id as string | null) ?? null,
+      birthright: pkg.birthright_status === "on",
+      source: r.source as string,
+      expiresAt: (r.expires_at as string | null) ?? null,
+      resources: ((pkg.access_package_resources as Row[] | null) ?? []).length,
+      applicationIds,
+    });
   }
   return out;
 }

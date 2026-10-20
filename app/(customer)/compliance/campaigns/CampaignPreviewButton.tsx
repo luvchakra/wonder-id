@@ -8,8 +8,11 @@ type Preview = { items: number; subjects: number; privileged: number; reviewers:
 /**
  * COMPLIANCE-P0-14: counts what the surrounding launch form would create,
  * read only (POST /api/v1/compliance/campaigns/preview). Nothing is written.
+ * COMPLIANCE-P0-15: a campaign type passes what it would launch as `body`
+ * (null while its target is missing); without one, the form's custom fields
+ * are read.
  */
-export function CampaignPreviewButton() {
+export function CampaignPreviewButton({ body }: { body?: Record<string, unknown> | null }) {
   const [state, setState] = useState<{ busy: boolean; preview?: Preview; error?: string }>({ busy: false });
 
   async function preview(e: React.MouseEvent<HTMLButtonElement>) {
@@ -21,22 +24,22 @@ export function CampaignPreviewButton() {
     const res = await fetch("/api/v1/compliance/campaigns/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify(body ?? {
         scopeType: f.get("scopeType"),
         scope: { ...(criticality ? { criticality: criticality.split(",").map((s) => s.trim()) } : {}), ...(f.get("privilegedOnly") === "on" ? { privilegedOnly: true } : {}) },
         reviewerKind: f.get("reviewerKind") || undefined,
         reviewerId: String(f.get("reviewerId") ?? "").trim() || undefined,
       }),
     });
-    const body = await res.json().catch(() => null);
-    if (!res.ok || !body?.ok) setState({ busy: false, error: body?.error?.message ?? "Preview unavailable" });
-    else setState({ busy: false, preview: body.data as Preview });
+    const result = await res.json().catch(() => null);
+    if (!res.ok || !result?.ok) setState({ busy: false, error: result?.error?.message ?? "Preview unavailable" });
+    else setState({ busy: false, preview: result.data as Preview });
   }
 
   const p = state.preview;
   return (
     <>
-      <Button type="button" variant="secondary" onClick={preview} disabled={state.busy}>
+      <Button type="button" variant="secondary" onClick={preview} disabled={state.busy || body === null}>
         {state.busy ? "Counting…" : "Preview"}
       </Button>
       <span role="status" className="text-sm text-muted-foreground">

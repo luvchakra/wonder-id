@@ -14,7 +14,7 @@ import type {
   LifecycleTaskStatus,
   LifecycleTaskType,
 } from "@/lib/shared/types/agent-identity";
-import { endDatePassed, HUMAN_TRANSITIONS, opensAccessRemoval, opensBirthright, ruleGrantRefusal, statusForState, tasksForEvent, whyCannotDisableAll, type DetectedEvent } from "./humanLifecycle";
+import { endDatePassed, HUMAN_TRANSITIONS, opensAccessRemoval, opensBirthright, opensEventReview, ruleGrantRefusal, statusForState, tasksForEvent, whyCannotDisableAll, type DetectedEvent } from "./humanLifecycle";
 import { assignOwner, removeOwner } from "./owners";
 import { lifecycleRuleTriggers } from "./attributeRules";
 import { applyIdentityRules } from "./identityRulesService";
@@ -192,6 +192,13 @@ export async function recordLifecycleEvents(
           .eq("task_type", "review_access");
         if (detailError) throw new Error(`recording the birthright review: ${detailError.message}`);
       }
+    }
+
+    // COMPLIANCE-P0-15: an event-based access review template may start a campaign for this person.
+    // Loaded at call time (Compliance's service imports this module's service); it never throws.
+    if (opensEventReview(d)) {
+      const { launchCampaignsForLifecycleEvent } = await import("@/modules/certification-compliance/service");
+      await launchCampaignsForLifecycleEvent(tenantId, subject.id, { id: event.id, eventType: d.eventType });
     }
 
     await writeAudit({

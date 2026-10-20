@@ -2352,3 +2352,11 @@ definitions and restores or retires them to the file's state through
 change is validated and audited as from the Identity Attributes page; a
 definition that differs is never edited. Tests: `attributeBundle.test.ts`
 (4). Details in the Platform audit log.
+
+## 2026-10-20 — Lifecycle events start event-based access reviews (COMPLIANCE-P0-15)
+
+`opensEventReview()` (pure, tested) marks a working person's mover,
+manager change, conversion or rehire event; the lifecycle service then
+calls Compliance's `launchCampaignsForLifecycleEvent()` (loaded at call
+time, never throws), after the event, its tasks and birthright work.
+Nothing else in the lifecycle flow changed.

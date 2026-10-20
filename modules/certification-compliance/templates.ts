@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/shared/types/foundation";
 import type { CertificationCampaign } from "@/lib/shared/types/compliance";
 import { launchCampaign } from "./campaigns";
 import { launchFromTemplateInput, validateTemplate, type TemplateInput, type ValidTemplate } from "./templateRules";
+import type { CampaignTriggerEvent, CampaignType } from "./campaignTypes";
 
 /**
  * COMPLIANCE-P0-14 part 1 — campaign templates. Read as the caller (RLS,
@@ -27,6 +28,9 @@ export type CampaignTemplate = {
   cadence: string;
   dueInDays: number | null;
   createdAt: string;
+  /** COMPLIANCE-P0-15: the campaign type it was designed from, and what starts an event-based one. */
+  campaignType: CampaignType;
+  triggerEvents: CampaignTriggerEvent[];
 };
 
 function toTemplate(r: Row): CampaignTemplate {
@@ -40,6 +44,8 @@ function toTemplate(r: Row): CampaignTemplate {
     cadence: r.cadence as string,
     dueInDays: (r.due_in_days as number | null) ?? null,
     createdAt: r.created_at as string,
+    campaignType: ((r.campaign_type as CampaignType | null) ?? "custom") as CampaignType,
+    triggerEvents: ((r.trigger_events as CampaignTriggerEvent[] | null) ?? []) as CampaignTriggerEvent[],
   };
 }
 
@@ -60,7 +66,16 @@ export async function saveCampaignTemplate(tenantId: string, actorId: string, in
     .single();
   if (error?.code === "23505") throw new ApiError(409, "DUPLICATE_NAME", "A template with this name already exists");
   if (error || !data) throw new ApiError(500, "WRITE_FAILED", error?.message ?? "Could not save");
-  await writeAudit({ tenantId, actorId, actorType: "user", action: "compliance.template_saved", objectType: "certification_campaign_template", objectId: data.id as string, outcome: "success", metadata: { scopeType: v.scope_type, reviewerKind: v.reviewer_kind } });
+  await writeAudit({
+    tenantId,
+    actorId,
+    actorType: "user",
+    action: "compliance.template_saved",
+    objectType: "certification_campaign_template",
+    objectId: data.id as string,
+    outcome: "success",
+    metadata: { scopeType: v.scope_type, reviewerKind: v.reviewer_kind, campaignType: v.campaign_type, ...(v.trigger_events.length ? { triggerEvents: v.trigger_events } : {}) },
+  });
   return toTemplate(data);
 }
 
@@ -79,12 +94,28 @@ export async function archiveCampaignTemplate(tenantId: string, actorId: string,
   await writeAudit({ tenantId, actorId, actorType: "user", action: "compliance.template_archived", objectType: "certification_campaign_template", objectId: templateId, outcome: "success" });
 }
 
-/** Starts an ordinary campaign from the template (validated again, as the template may predate a rule). */
+/** A stored template, validated again (it may predate a rule). */
+export function revalidateTemplate(row: Row): ValidTemplate | { error: string } {
+  return validateTemplate({
+    name: row.name,
+    scopeType: row.scope_type,
+    scope: row.scope,
+    reviewerKind: row.reviewer_kind,
+    reviewerId: row.reviewer_id,
+    cadence: row.cadence,
+    dueInDays: row.due_in_days,
+    campaignType: row.campaign_type,
+    triggerEvents: row.trigger_events,
+  });
+}
+
+/** Starts an ordinary campaign from the template. An event-based template starts only on its events. */
 export async function launchCampaignFromTemplate(tenantId: string, actorId: string, templateId: string, now = new Date()): Promise<CertificationCampaign> {
   const row = await readTemplate(tenantId, templateId);
-  const v = validateTemplate({ name: row.name, scopeType: row.scope_type, scope: row.scope, reviewerKind: row.reviewer_kind, reviewerId: row.reviewer_id, cadence: row.cadence, dueInDays: row.due_in_days });
+  const v = revalidateTemplate(row);
   if ("error" in v) throw new ApiError(409, "TEMPLATE_INVALID", v.error);
-  const campaign = await launchCampaign(tenantId, actorId, launchFromTemplateInput(v as ValidTemplate, actorId, now));
+  if (v.campaign_type === "event_based") throw new ApiError(409, "EVENT_TEMPLATE", "An event-based template starts a campaign when its event happens");
+  const campaign = await launchCampaign(tenantId, actorId, launchFromTemplateInput(v, actorId, now), { templateId });
   await writeAudit({ tenantId, actorId, actorType: "user", action: "compliance.template_launched", objectType: "certification_campaign_template", objectId: templateId, outcome: "success", metadata: { campaignId: campaign.id } });
   return campaign;
 }

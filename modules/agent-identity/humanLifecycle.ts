@@ -121,6 +121,16 @@ export function tasksForEvent(eventType: LifecycleEventType, ctx: { hasSignIn: b
 }
 
 /**
+ * COMPLIANCE-P0-15: the events an event-based access review may start on
+ * (Compliance's CAMPAIGN_TRIGGER_EVENTS): a working person who moved,
+ * changed manager, converted or returned. A leaver's access is removed, not
+ * reviewed.
+ */
+export function opensEventReview(d: Pick<DetectedEvent, "eventType" | "toState">): boolean {
+  return (d.eventType === "mover" || d.eventType === "manager_change" || d.eventType === "conversion" || d.eventType === "rehire") && (d.toState === "ACTIVE" || d.toState === "PRE_JOIN");
+}
+
+/**
  * IDENTITY-P0-18 (owner decision, 13 October 2026): a joiner, rehire or
  * mover who is active gets the birthright packages they are eligible for.
  * A joiner still before their start date gets them when they become active

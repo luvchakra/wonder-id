@@ -7,7 +7,10 @@ import "server-only";
  * control_mappings/etc. directly.
  */
 
-export { launchCampaign, getCampaign, listCampaigns, listCampaignItems, listCampaignItemsPage, getCampaignMetrics, campaignItemCounts, failStaleCampaignBuilds, previewCampaign, type CampaignPreview, type LaunchCampaignInput } from "./campaigns";
+export { launchCampaign, getCampaign, listCampaigns, listCampaignItems, listCampaignItemsPage, getCampaignMetrics, campaignItemCounts, failStaleCampaignBuilds, previewCampaign, type CampaignPreview, type LaunchCampaignInput, type LaunchOptions } from "./campaigns";
+// COMPLIANCE-P0-15: campaign types; event-based campaigns start from Identity's lifecycle events.
+export { launchCampaignsForLifecycleEvent } from "./eventCampaigns";
+export { listCampaignTargets, listPersonAccessForReview, searchEntitlementTargets, searchPeopleTargets, type CampaignTargets } from "./campaignTargets";
 export { listRevocations, type RevocationRow } from "./revocations";
 export { askConsultation, answerConsultation, listConsultationsForItem, getConsultationForAnswer, type Consultation } from "./consultations";
 export { listCampaignTemplates, saveCampaignTemplate, archiveCampaignTemplate, launchCampaignFromTemplate, type CampaignTemplate } from "./templates";
