@@ -61,10 +61,29 @@ export default async function ApprovalWorkflowPage({ params }: { params: Promise
       </Card>
 
       <Card>
-        <CardHeader title="Used by" description="Request policies that approve with this workflow." />
+        <CardHeader
+          title="Used by"
+          description="Request policies that approve with this workflow."
+          actions={
+            w.policies.length > 0 ? (
+              <Link href="/access/request-policies" className="text-sm text-primary hover:underline">
+                Request policies
+              </Link>
+            ) : undefined
+          }
+        />
         <CardBody>
           {w.policies.length === 0 ? (
-            <EmptyState title="No policy uses it yet" description="Choose it as a request policy's approval workflow." />
+            <EmptyState
+              title="No policy uses it yet"
+              description="Choose it as a request policy's approval workflow."
+              action={
+                // A nudge to the next step (owner test feedback item 16, 2026-10-20).
+                <Link href="/access/request-policies" className="text-sm font-medium text-primary hover:underline">
+                  Go to Request Policies
+                </Link>
+              }
+            />
           ) : (
             <ul className="divide-y divide-border text-sm" data-testid="workflow-policies">
               {w.policies.map((p) => (

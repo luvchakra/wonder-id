@@ -39,7 +39,13 @@ export default async function ApprovalWorkflowsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-[22px] font-semibold tracking-[-0.015em] text-foreground">Approval workflows</h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Approval patterns with one or more levels. A request policy chooses one, so many applications can share it.</p>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Approval patterns with one or more levels. A{" "}
+            <Link href="/access/request-policies" className="text-primary hover:underline">
+              request policy
+            </Link>{" "}
+            chooses one, so many applications can share it.
+          </p>
         </div>
         <ObjectActionsMenu create={canManage ? { label: "New workflow…", title: "New approval workflow", content: createForm } : undefined} />
       </div>

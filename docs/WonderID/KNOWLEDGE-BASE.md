@@ -695,6 +695,7 @@ These pages are for the WonderID service operator only, never for customers:
 Newest first.
 
 | Date | What changed |
+| 20 Oct 2026 | An approval workflow's page links to Request Policies, where a workflow is put to use, so the next step is one click away. |
 |---|---|
 | 20 Oct 2026 | Approval Workflows moved from the Access menu to Administration › Integrations, since setting them up is an administrator's job. |
 | 20 Oct 2026 | Organization Settings has a new Email (SMTP) page: the organization's notifications and invitations can be sent through its own mail server, with a test e-mail to check the settings. |
