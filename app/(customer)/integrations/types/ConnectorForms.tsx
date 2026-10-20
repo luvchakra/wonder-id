@@ -39,6 +39,18 @@ function SettingInput({ s, value }: { s: SettingField; value?: string | number |
     );
   if (s.key === "caCertificate" || (s.type === "string" && /certificate/i.test(s.label)))
     return <TextareaField label={s.label} name={name} rows={3} hint={s.help} placeholder="-----BEGIN CERTIFICATE-----" defaultValue={current === undefined ? undefined : String(current)} />;
+  if (s.multiline)
+    return (
+      <TextareaField
+        label={s.label}
+        name={name}
+        rows={5}
+        hint={s.help}
+        placeholder={s.placeholder}
+        className="font-mono text-xs"
+        defaultValue={current === undefined ? undefined : String(current)}
+      />
+    );
   return (
     <TextField
       label={s.label}
@@ -86,7 +98,7 @@ export function ConnectorSettingsForm(props: { integrationId: string; name: stri
         {props.settings.map((s) => (
           <div key={s.key} className="min-w-0">
             <dt className="text-xs text-muted-foreground">{s.label}</dt>
-            <dd className="break-words text-foreground">{props.values[s.key] === undefined || props.values[s.key] === "" ? <span className="text-muted-foreground">Not set</span> : String(props.values[s.key])}</dd>
+            <dd className="whitespace-pre-wrap break-words text-foreground">{props.values[s.key] === undefined || props.values[s.key] === "" ? <span className="text-muted-foreground">Not set</span> : String(props.values[s.key])}</dd>
           </div>
         ))}
       </dl>

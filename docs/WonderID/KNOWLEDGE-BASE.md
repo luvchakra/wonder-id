@@ -192,7 +192,13 @@ All information from your systems reaches WonderID through **connections**. Ther
 | Applications | ERPNext, Gitea, Mattermost, Nextcloud, Zendesk, and any application with a SCIM 2.0 service (which can also add and remove group members, disable and create users) |
 | Infrastructure and data | PostgreSQL, Kubernetes, OpenBao (secrets) |
 | AI | MCP server, Runtime Gateway |
-| Anything else | Webhook (signed events from any system), CSV files |
+| Anything else | Generic REST API (any REST/JSON API, set up in the connection's own settings), Webhook (signed events from any system), CSV files |
+
+**Any REST API, without writing a connection type**
+- **Generic REST API:** for a system with a REST/JSON interface and no type of its own. Everything is entered in the connection's settings: the address, how it signs in, a test request, paging (page numbers, offsets, cursors or Link headers) and extra headers.
+- **One box per kind of record** (people, accounts, entitlements, access, applications), left empty to skip it: the request on the first line (`GET /api/users?status=active`, or a POST with a JSON body), then where the records are (`records: data`), then one field per line (`email = mail, upn | lower`). A box can keep only matching records, read each group's members, and check the count the system reports.
+- **Changes:** one per line (`revoke_access = DELETE /groups/{target.entitlement}/members/{target.account}`), made only after an administrator turns changes on for the connection.
+- **Same safety as every type:** requests only go to the connection's own address, credentials are only sent in the sign-in, and a mistake is reported with its box and line when you save.
 
 **Your own connection types**
 - An integrator can describe any system with an HTTP, LDAP, SQL, MCP or file interface: no code, just a definition.
@@ -697,6 +703,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 20 Oct 2026 | New built-in connection type, Generic REST API: connect any REST/JSON API by describing its sign-in, requests, paging, field mappings and changes in the connection's own settings, with no connection type to write. |
 | 20 Oct 2026 | Active Directory is a built-in connection type: people with their managers, accounts (disabled, privileged, expiring, last sign-in), managed service accounts, security and distribution groups and memberships; it can add and remove group members once changes are turned on. |
 | 20 Oct 2026 | An application's page has two new tabs: Policies (the request policies that apply to it and who approves under each, with a link to change them) and Audit History (the latest changes to the application, its entitlements and entitlement types). |
 | 20 Oct 2026 | The Email (SMTP) page has a Provider list (GoDaddy, Gmail, Microsoft 365, Outlook.com, SendGrid, Mailgun, Zoho Mail and others) that fills in the server, security and port. |

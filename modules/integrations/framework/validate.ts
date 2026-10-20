@@ -424,6 +424,8 @@ export function validateDefinition(input: unknown): { definition: ConnectorDefin
       if (!str(s.label, 80)) issue(ctx, `${p}.label`, "is required");
       if (!["url", "string", "number", "boolean", "select"].includes(String(s.type))) issue(ctx, `${p}.type`, "must be url, string, number, boolean or select");
       if (s.type === "select" && (!Array.isArray(s.options) || s.options.length === 0)) issue(ctx, `${p}.options`, "a select needs options");
+      if (s.multiline !== undefined && (typeof s.multiline !== "boolean" || s.type !== "string")) issue(ctx, `${p}.multiline`, "must be true or false, on a string setting");
+      if (s.placeholder !== undefined && !str(s.placeholder, 500)) issue(ctx, `${p}.placeholder`, "must be text (at most 500 characters)");
       ctx.settings.set(s.key, String(s.type));
     });
   const urlSettings = [...ctx.settings].filter(([, t]) => t === "url").map(([k]) => k);

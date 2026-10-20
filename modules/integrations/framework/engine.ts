@@ -21,6 +21,7 @@ import {
 } from "./types";
 import { fillTemplate, mapRecord, matchesFilters, readPath, type TemplateScope } from "./mapping";
 import { validateDefinition, validateSettings } from "./validate";
+import { expandDefinition } from "./restApi";
 import { BUILTIN_DEFINITIONS } from "./definitions";
 import { ConnectorRequestError, HttpSession, LIMITS, type FetchLike } from "./http";
 
@@ -187,7 +188,10 @@ export function parseConnectorConfig(config: ConnectorConfig): { def: ConnectorD
   if (!definition) throw new Error(`This integration's connector definition is invalid: ${issues[0]?.path} ${issues[0]?.message}`);
   const { settings, issues: settingIssues } = validateSettings(definition, c.settings);
   if (settingIssues.length) throw new Error(settingIssues[0].message);
-  return { def: definition, settings };
+  // Fix-list item 19: a Generic REST API connection runs the definition its settings describe.
+  const expanded = expandDefinition(definition, settings, c.definition?.origin);
+  if (!expanded.definition) throw new Error(expanded.issues[0]?.message ?? "This connection's settings do not describe a working connector");
+  return { def: expanded.definition, settings };
 }
 
 export class DefinitionConnector implements ConnectorAdapter {
