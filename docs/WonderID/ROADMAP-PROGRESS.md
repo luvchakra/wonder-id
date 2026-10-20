@@ -44,6 +44,7 @@ What WonderID does today and what comes next, phase by phase. Built from the [kn
 - ✅ Application discovery
 - ✅ Connector framework and gateway
 - ✅ Built-in connectors (HR, identity provider, LDAP, Active Directory, applications)
+- ✅ Generic REST API connector, configured in its settings
 - ✅ CSV import and export
 - ✅ Accounts inventory: orphaned, dormant, privileged
 - ✅ Reconciliation of accounts, entitlements and grants

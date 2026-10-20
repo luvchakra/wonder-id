@@ -147,6 +147,10 @@ export type SettingField = {
   default?: string | number | boolean;
   options?: string[];
   help?: string;
+  /** A string setting entered over several lines (the generic REST connector's mappings). */
+  multiline?: boolean;
+  /** Example text shown in an empty field. */
+  placeholder?: string;
 };
 
 /** A secret value the organization enters. `optional` ones may be left empty (an MCP server without auth). */

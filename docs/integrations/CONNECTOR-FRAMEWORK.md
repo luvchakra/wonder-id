@@ -129,6 +129,46 @@ definition (JSON) ──validate──▶ catalog ──connect──▶ integra
                                  identity sources, account inventory, access, risk
 ```
 
+## The Generic REST API type
+
+Fix-list item 19 (owner request, 2026-10-20). The built-in `rest-api` type
+(`definitions/rest-api.ts`) connects any REST/JSON API without writing a
+definition: the connection's own settings say how to sign in, which request
+returns each kind of record and how its fields map. `restApi.ts`
+(`expandDefinition`) turns those settings into an ordinary definition every
+time the connection is parsed (`parseConnectorConfig`), when it is created
+and when its settings are saved. The result goes through
+`validateDefinition`, so it meets every rule a built-in meets (relative
+paths only, no secret outside the auth block, writes that name their
+target, safe patterns), and runs through the same engine, gateway and
+limits. Only a connection made from the built-in is expanded; a custom
+definition that reuses the key runs as written.
+
+- **Sign-in method:** none, Basic, bearer, API key in a header or the query
+  string (`apiKeyName`), OAuth 2.0 client credentials (secret in the body or
+  HTTP Basic; `tokenUrl` is a url setting, so it is an allowed origin). The
+  built definition asks only for the secrets that method uses.
+- **Paging** applies to every read: page number (`firstPage`), offset,
+  cursor (`cursorPath`) or Link header. `pagination: none` in a kind's box
+  turns it off for that request. **Extra headers** go on every request.
+- **One box per kind** (`identities`, `accounts`, `entitlements`, `access`,
+  `applications`): the request line (`[METHOD] /path[?query] [JSON body]`),
+  then `records:`, `for each:`, `unwind:`, `total:`, `where:` and
+  `pagination:` lines, then `field = source | transform | …` lines. A source
+  is a path (`a, b` tries each), a template (`{record.first} {record.last}`),
+  a quoted constant, or a mapping in the definition's JSON form. Transforms
+  are the closed list plus `map:a=b,*=c`, `prefix:`, `contains:`,
+  `replace:old=>new`, `regex:` and `default:`.
+- **Changes it can make:** `operation [(repeatable)] = METHOD /path [JSON]`
+  per line, for `revoke_access`, `disable_account`, `grant_access` and
+  `create_account`; off until an administrator turns writes on.
+- Every mistake is reported against the setting and line it is on.
+
+`contract.test.ts` runs the full http contract against a sample
+configuration (an API key header, numbered pages, access per group, all four
+changes). Database, PowerShell and Active Directory connectors from the same
+fix-list item are separate pieces of work.
+
 ## Connection types and connections
 
 Integrations has two levels (user decision, 2026-10-10):

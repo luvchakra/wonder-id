@@ -107,6 +107,7 @@ import { DefinitionConnector, capabilitiesOf, httpDriver, kindsOf, specsOf, writ
 import { ConnectorRequestError, LIMITS, type FetchLike } from "./http";
 import { fillTemplate, mapRecord, readPath, templateVariables } from "./mapping";
 import { validateDefinition } from "./validate";
+import { REST_API_KEY, expandDefinition } from "./restApi";
 import {
   CANONICAL_FIELDS,
   CONNECTOR_DRIVERS,
@@ -292,7 +293,34 @@ function needsOf(def: ConnectorDefinition, spec: ResourceSpec, kind: ResourceKin
   return n;
 }
 
+/**
+ * The Generic REST API type runs what a connection's settings describe
+ * (restApi.ts), so the contract runs it as one organization configured it:
+ * an API key header, numbered pages, access read per group, and changes.
+ */
+const REST_API_SETTINGS = {
+  baseUrl: "https://rest-api.contract.test",
+  application: "Contract REST",
+  authType: "API key in a header",
+  apiKeyName: "X-Api-Key",
+  headers: "X-Tenant: contract",
+  test: "GET /me",
+  pagination: "Page number",
+  pageParam: "page",
+  pageSizeParam: "per_page",
+  pageSize: 2,
+  firstPage: 1,
+  identities: "GET /people?active=true\nrecords: data\nexternalId = id\nemail = work.email | lower\ndisplayName = {record.first} {record.last}\nstatus = active | map:true=active,false=inactive",
+  accounts: "GET /users\nrecords: data\nexternalId = id\nusername = login\nemail = email, login | lower\nstatus = state",
+  entitlements: "GET /groups\nrecords: data\nexternalId = id\nname = name\ntype = \"group\"",
+  access: "GET /groups/{parent.id}/members\nfor each: entitlement\nrecords: data\nexternalId = {parent.id}:{record.id}\naccountExternalId = id\nentitlementExternalId = parent.id",
+  changes:
+    'revoke_access (repeatable) = DELETE /groups/{target.entitlement}/members/{target.account}\ngrant_access (repeatable) = PUT /groups/{target.entitlement}/members/{target.account}\ndisable_account (repeatable) = PATCH /users/{target.account} {"active": false}\ncreate_account = POST /users {"email": "{target.email}"}',
+  requestsPerSecond: 10,
+};
+
 function settingsFor(def: ConnectorDefinition): Record<string, string | number | boolean> {
+  if (def.key === REST_API_KEY) return REST_API_SETTINGS;
   const out: Record<string, string | number | boolean> = {};
   for (const s of def.settings) {
     if (s.type === "url") out[s.key] = `https://${def.key}.contract.test`;
@@ -487,7 +515,8 @@ const pageSize = (p: Pagination): number => (p.type === "none" ? 0 : p.type === 
 
 // ---------------------------------------------------------------- http: every built-in, generated
 
-const HTTP_DEFS = BUILTIN_DEFINITIONS.filter((d) => d.driver === "http");
+// The Generic REST API type is run as the definition its sample settings build.
+const HTTP_DEFS = BUILTIN_DEFINITIONS.filter((d) => d.driver === "http").map((d) => (d.key === REST_API_KEY ? expandDefinition(d, REST_API_SETTINGS, "builtin").definition! : d));
 const WRITE_CAPABILITY: Record<DefinitionWriteOperation, string> = { revoke_access: "revokeAccess", disable_account: "disableAccount", grant_access: "grantAccess", create_account: "createAccount" };
 
 describe("contract: the generated http fixtures", () => {

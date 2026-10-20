@@ -14,6 +14,7 @@ import { capabilitiesOf, parseConnectorConfig } from "./engine";
 import { createDefinitionConnector } from "./connector";
 import { openGateway } from "../gateway/gateway";
 import { validateDefinition, validateSecrets, validateSettings } from "./validate";
+import { expandDefinition } from "./restApi";
 import { protocolLabel } from "./typeSummary";
 import { compareVersions, planUpgrade, upgradedCapabilities, type UpgradePlan } from "./upgrade";
 import { writesEnabled } from "../connectorWriteRules";
@@ -200,9 +201,13 @@ export async function connectSystem(tenantId: string, actorId: string, input: Co
   const { settings, issues } = validateSettings(def, input.settings);
   if (issues.length) throw new DefinitionInvalidError(issues);
   checkConnectorAddresses(def, settings);
+  // Fix-list item 19: a Generic REST API connection runs what its settings describe; check that now.
+  const expanded = expandDefinition(def, settings, input.origin);
+  if (!expanded.definition) throw new DefinitionInvalidError(expanded.issues);
+  const run = expanded.definition;
   let secret: string | null = null;
-  if (input.secret !== undefined && def.auth.type !== "none") {
-    const s = validateSecrets(def, input.secret);
+  if (input.secret !== undefined && run.auth.type !== "none") {
+    const s = validateSecrets(run, input.secret);
     if (s.issues.length) throw new DefinitionInvalidError(s.issues);
     secret = s.secret;
   }
@@ -218,12 +223,12 @@ export async function connectSystem(tenantId: string, actorId: string, input: Co
     integrationTypeId: "connector",
     name: input.name,
     config: config as unknown as Record<string, unknown>,
-    capabilities: capabilitiesOf(def),
+    capabilities: capabilitiesOf(run),
   });
   let credentialError: string | null = null;
   if (secret) {
     try {
-      await setCredential(tenantId, actorId, integration.id, AUTH_TYPE_FOR[def.auth.type], secret);
+      await setCredential(tenantId, actorId, integration.id, AUTH_TYPE_FOR[run.auth.type], secret);
       integration.hasCredentials = true;
     } catch (err) {
       credentialError = err instanceof Error ? err.message : "The connection test failed";
@@ -302,6 +307,8 @@ export async function updateConnectorSettings(tenantId: string, actorId: string,
   const { settings, issues } = validateSettings(def, input.settings);
   if (issues.length) throw new DefinitionInvalidError(issues);
   checkConnectorAddresses(def, settings);
+  const expanded = expandDefinition(def, settings, (row.config as Partial<ConnectorIntegrationConfig> | null)?.definition?.origin);
+  if (!expanded.definition) throw new DefinitionInvalidError(expanded.issues);
   const urlKeys = def.settings.filter((s) => s.type === "url").map((s) => s.key);
   const baseUrl = settings[urlKeys.includes("baseUrl") ? "baseUrl" : urlKeys[0]];
   const config = {

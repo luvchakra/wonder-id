@@ -588,6 +588,21 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     keywords: ["integration", "connector", "connection", "connection type", "active directory", "ad", "ldap", "saviynt", "rest", "mcp", "webhook", "sync", "sync failed", "import", "credentials", "masked", "settings", "connect", "field mapping", "test connection", "gateway"],
     href: "/integrations",
   },
+  {
+    id: "rest-api-connector",
+    title: "Connecting any REST API",
+    category: "Integrations",
+    updated: "2026-10-20",
+    summary:
+      "The Generic REST API connection type reads people, accounts, entitlements, access and applications from any REST/JSON API, described in the connection's own settings.",
+    body: [
+      "Use Generic REST API (Administration › Integrations › Connector Library) for a system with a REST/JSON API that has no connection type of its own. Enter the API address, choose a Sign-in method (none, Basic, bearer token, an API key in a header or the query string, or OAuth 2.0 client credentials) and the credentials it asks for, and a Test request that proves they work. Paging covers page numbers, offsets, cursors and Link headers; Extra headers are sent with every request.",
+      "Each kind of record has its own box, left empty to skip it. The first line is the request, such as GET /api/users?status=active, or POST /search with a JSON body after the path. Then records: names where the list is in the response, and each further line maps one field: email = mail, upn | lower tries mail, then upn, and lowercases it. A field can also be a template ({record.first} {record.last}), a constant (\"employee\") or a map (status = active | map:true=active,false=disabled). where: status != deleted keeps only matching records, total: meta.total checks that everything was read, and for each: entitlement with {parent.id} in the path reads each group's members.",
+      "Changes it can make lists one change per line, such as revoke_access = DELETE /groups/{target.entitlement}/members/{target.account}. Add (repeatable) when sending the change twice cannot make it twice. Changes run only after an administrator turns them on for the connection, like every other connection. Every request goes to the connection's own address, a credential is only ever sent in the sign-in, and a mistake in a box is reported with its line number when you save.",
+    ],
+    keywords: ["rest", "rest api", "generic", "json", "http", "api key", "bearer", "oauth", "client credentials", "pagination", "cursor", "field mapping", "custom connector", "endpoint"],
+    href: "/integrations/types",
+  },
   // ----------------------------------------------------------------- Operations
   {
     id: "reports-audit",

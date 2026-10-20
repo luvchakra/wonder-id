@@ -3134,3 +3134,44 @@ rotation, traceability); `npx vitest run modules/integrations
 tests/architecture` 571 passed; `npm run typecheck` clean apart from the
 missing local product images; eslint clean on changed files. Not yet run
 against a live domain controller (`live.test.ts` needs a connections file).
+
+## 2026-10-20 — Generic REST API connection type (INTEGRATION-P0-32, fix-list item 19)
+
+What changed: a built-in connection type, Generic REST API (`rest-api`),
+that connects any REST/JSON API from its settings alone. Fix-list item 19
+asked for generic REST, database (Oracle, Sybase, PostgreSQL, SQL Server),
+PowerShell and AD connectors; this entry is the REST part only, built in
+parallel with the other three.
+
+- `framework/restApi.ts` (`expandDefinition`) builds an ordinary connector
+  definition from the connection's settings: sign-in method, a test
+  request, paging, extra headers, one box per kind (request, records path,
+  for each, unwind, total, where, field mappings with transforms) and the
+  changes it can make. The result is checked by `validateDefinition`, and
+  errors name the setting and the line.
+- Hooked in at the one place a connection's definition is read
+  (`parseConnectorConfig`), and in `connectSystem` /
+  `updateConnectorSettings` so a mistake is reported on save. Capabilities
+  and the credential's type at creation come from the built definition.
+  Only a connection from the built-in (`origin: builtin`) is expanded.
+- `SettingField` gains `multiline` and `placeholder` (validated); the
+  connection forms show multiline settings as a monospace text box.
+- Not changed: the engine, the http driver, the gateway, the write
+  pipeline, the boundary test's allowlists. Changing the settings of an
+  existing connection does not rewrite its stored read capabilities; the
+  sync reads the kinds the built definition has.
+
+Security: requests stay on the connection's own url settings (`baseUrl`,
+`tokenUrl`); `{secret.…}` outside the auth block, absolute paths,
+`Authorization`/`Cookie`/`Host` headers, `{parent.…}` without for each and
+writes that do not name their target are refused by the validator, with
+tests for each. Writes remain off until an administrator turns them on
+(non-negotiable #12).
+
+Verified: `npx vitest run modules/integrations tests/architecture app`
+plus `modules/ui/help`: 58 files, 688 tests passed after rebasing on the Active Directory connector (the contract suite now runs every http
+property against a sample REST configuration); `restApi.test.ts` 13/13;
+`npm run typecheck` clean apart from the
+untracked PNG imports of `app/welcome` that need Next's generated types;
+eslint clean on the changed files.
+
