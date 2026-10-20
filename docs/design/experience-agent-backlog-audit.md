@@ -4392,3 +4392,14 @@ released since the previous entry.
 
 **Verified:** `modules/ui/help` and `lib/ai/helpAnswer.test.ts`, 33 passed;
 typecheck and eslint clean; `next build` passed.
+
+## 2026-10-20 — The header shows the person's name, not their email (owner feedback, item 13)
+
+A person whose account has no display name (`users.display_name` empty, for
+example one invited from an identity) was shown by email in the header and
+account menu. The layout now falls back to their identity's name in the
+current organization (`getIdentityForUser`, read in the layout's existing
+parallel wave, so no extra round trip in sequence), then to the email.
+
+**Verified:** typecheck, eslint on `app/(customer)/layout.tsx`; E2E in the
+nightly run.

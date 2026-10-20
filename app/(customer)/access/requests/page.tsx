@@ -56,6 +56,9 @@ export default async function AccessRequestsPage({ searchParams }: { searchParam
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
   let awaiting: string[] = [];
   let myTasks: FulfilmentTask[] = [];
+  // The caller's own identity: their tasks, and the requests raised for them under My requests.
+  const mePromise = getIdentityForUser(ctx.tenantId!, ctx.userId);
+  mePromise.catch(() => undefined); // awaited below; this only keeps an early failure from being reported as unhandled
   if (asked === null || asked === "waiting") {
     // Steps past their time are escalated or expired, and waiting requests
     // without a chain get one. Performance review (2026-10-19): after the
@@ -73,7 +76,7 @@ export default async function AccessRequestsPage({ searchParams }: { searchParam
     });
     // ACCESS-P0-42: a group's tasks wait for each member. What waits for the caller is read in the same wave.
     const awaitingPromise = listRequestIdsAwaiting(tenantId, { userId, canApproveAsAccessManager: canApprove });
-    const [me, groupIds] = await Promise.all([getIdentityForUser(tenantId, userId), activeGroupIdsOf(tenantId, userId)]);
+    const [me, groupIds] = await Promise.all([mePromise, activeGroupIdsOf(tenantId, userId)]);
     [awaiting, myTasks] = await Promise.all([
       awaitingPromise,
       listFulfilmentTasks(tenantId, { view: "todo", forPerson: { userId, identityId: me?.id ?? null, canApprove, groupIds } }),
@@ -83,11 +86,13 @@ export default async function AccessRequestsPage({ searchParams }: { searchParam
   const view: View = asked ?? (awaiting.length || myTasks.length || canApprove ? "waiting" : "mine");
   const { rows, total } = await listRequests(ctx.tenantId!, {
     mineUserId: view === "mine" ? ctx.userId : undefined,
+    mineIdentityId: view === "mine" ? ((await mePromise)?.id ?? null) : undefined,
     awaiting: view === "waiting" ? { ids: awaiting, pendingAgentRequests: canApprove } : undefined,
     page,
     pageSize: PAGE_SIZE,
   });
   const awaitingMe = new Set(awaiting);
+  const myIdentityId = (await mePromise)?.id ?? null;
   // Owner feedback (20 Oct): a waiting line says whom it waits on. Read alongside the progress, not after it.
   const [progress, approvers] = await Promise.all([
     requestProgressFor(ctx.tenantId!, rows.filter((r) => r.status === "approved" || r.status === "fulfilled").map((r) => r.id)),
@@ -234,7 +239,7 @@ export default async function AccessRequestsPage({ searchParams }: { searchParam
                         ) : (
                           "—"
                         )}
-                        {mine ? <span className="block text-xs text-muted-foreground">Requested by you</span> : null}
+                        {mine ? <span className="block text-xs text-muted-foreground">Requested by you</span> : r.subjectIdentityId && r.subjectIdentityId === myIdentityId ? <span className="block text-xs text-muted-foreground">For you</span> : null}
                       </Td>
                       <Td>
                         <Badge tone={state.tone} className="whitespace-nowrap">

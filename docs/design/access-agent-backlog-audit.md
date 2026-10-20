@@ -4750,7 +4750,7 @@ verification and what was left out, is in `docs/design/qa-agent-backlog-audit.md
 
 ## 2026-10-20 — Requests list: the number opens the request, and a waiting request says whom it waits on (owner feedback)
 
-Owner's test feedback (item 14, "WonderID Test Feedback"): the list could be
+Owner's test feedback (item 12, "WonderID Test Feedback"): the list could be
 arranged better, the request numbers should be clickable, and it should show
 properly from whom the approval is pending.
 
@@ -4776,3 +4776,19 @@ which is now the number and still opens the request.
 
 **Left out:** nothing else on the list changed; agent requests (no approval
 chain) show no "Waiting on" line.
+
+## 2026-10-20 — My requests includes the requests raised for you (owner feedback, item 13)
+
+The owner signed in as a person someone had raised a request for; My
+requests was empty, because it listed only requests the caller raised.
+
+**Changed:** `listRequests()` takes `mineIdentityId`; "mine" is now raised
+by the caller, on their behalf, or for their own identity (one `or()` filter
+of validated UUIDs, under RLS and the tenant filter). The requests page
+reads the caller's identity once and marks such lines "For you". The API's
+`?mine=1` is unchanged.
+
+**Verified:** typecheck (only the pre-existing image-module errors), eslint
+on the changed files, `app/(customer)/access/requests`, `modules/ui/help`
+and `lib/tenant` tests: 11 files, 66 passed. E2E waits for the nightly run
+(owner instruction, 20 Oct: E2E only at night).

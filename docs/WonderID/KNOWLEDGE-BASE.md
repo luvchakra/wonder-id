@@ -329,6 +329,7 @@ An AI assistant can **propose** an onboarding configuration; a person always rev
 - **Changing a policy:** in an organization with two or more Tenant Administrators, a change to a request policy waits, showing each field's old and new value, until someone else who manages access approves it (Request policies → Waiting for approval). Approved, it applies as the policy's next version; rejected, nothing changes. With one administrator a change applies at once. Every applied change is kept as a numbered version.
 - Approvers get a message with a link straight to the request when it reaches them.
 - **The requests list:** each line starts with its request number and the date, and the number opens the request. A waiting request says whom it is waiting on: the person by name, any member of a group, or an access manager.
+- **My requests** lists the requests you raised and those someone raised for you (marked "For you").
 - **Away?** Hand your approvals or your requests to a colleague until a date (Approvals → Delegate your approvals). They act on your behalf, every decision records both of you, and either of you (or an access manager) can end it.
 - **An AI agent acting for you:** let an agent act for you (or for an agent you own) for named actions, optionally named applications, for up to 180 days. It takes effect once an owner of the agent approves it; nobody approves their own. When an agent tells the Runtime Gateway it acts for someone, the request is held for approval unless an approved delegation from them covers that action.
 - **Administration:** someone who manages roles can also hand a person's administration to a colleague. The colleague gets copies of that person's roles until the end date; ending it early removes them at once. The Tenant Administrator role is never handed over, and roles the colleague already holds are left as they are.
@@ -690,6 +691,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 20 Oct 2026 | My requests also lists the requests someone raised for you, marked "For you". The header shows your name in the organization when your account has no display name, instead of your email. |
 | 20 Oct 2026 | The requests list starts each line with its request number (a link to the request) and date, and a waiting request says whom it is waiting on. |
 | 19 Oct 2026 | Pages open faster: signing in is checked once beside the database instead of from far away on every page, busy pages load their data at the same time instead of one piece after another, and housekeeping runs after a page is shown. Cancelling a request now also closes its approval steps. |
 | 19 Oct 2026 | Get Help has Release notes: each release, newest first, with its date, version and the features it brought, each linked to its help section. It replaces the short "What's new" list. |
