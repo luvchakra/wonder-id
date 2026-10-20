@@ -1114,7 +1114,8 @@ SendGrid, Mailgun and Zoho Mail with each one's server, security and port
 select fills those fields (all stay editable), shows one line of advice
 where a provider needs it (app password, API key), and opens on the
 provider matching a saved server (`presetForHost`), or "Other". Nothing new
-is stored. Verified: `npx vitest run modules/operations/smtpRules.test.ts`
+is stored. The help guide names the providers except Resend, since its
+content test keeps WonderID's own vendors out of customer text. Verified: `npx vitest run modules/operations/smtpRules.test.ts`
 (10 passed: every preset passes `checkSmtpSettings`; host matching), eslint
 on the changed files, typecheck clean apart from the known `app/welcome`
 image errors.
