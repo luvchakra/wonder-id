@@ -13,6 +13,7 @@ export const PROVENANCE_TABLES = [
   "authorization_policies",
   "sso_connections",
   "tenant_settings",
+  "tenant_smtp_settings",
   "tenant_domains",
   "agent_api_keys",
   "feature_flags",

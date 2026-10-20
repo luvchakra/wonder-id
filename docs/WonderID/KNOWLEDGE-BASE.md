@@ -636,6 +636,11 @@ runs inside your organization and respects the viewer's permissions.
 - Choose OpenAI or Gemini, using WonderID's key or your own.
 - AI is used for summaries and proposals. Its output is always labelled as AI-generated, and it never decides anything.
 
+**Email (SMTP)**
+- Send the organization's e-mail (notifications and invitations) through its own mail server, from its own address.
+- Enter the server, SSL/TLS or STARTTLS, port, user name, password and From address, then send a test e-mail to yourself. The page shows whether the last test was sent or failed, and why.
+- The password is stored encrypted and never shown again. Without a server, or with it turned off, WonderID's own provider sends the e-mail as before.
+
 **Also here:** organization name, web address, branding and notification settings.
 
 ---
@@ -691,6 +696,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 20 Oct 2026 | Organization Settings has a new Email (SMTP) page: the organization's notifications and invitations can be sent through its own mail server, with a test e-mail to check the settings. |
 | 20 Oct 2026 | My requests also lists the requests someone raised for you, marked "For you". The header shows your name in the organization when your account has no display name, instead of your email. |
 | 20 Oct 2026 | The requests list starts each line with its request number (a link to the request) and date, and a waiting request says whom it is waiting on. |
 | 19 Oct 2026 | Pages open faster: signing in is checked once beside the database instead of from far away on every page, busy pages load their data at the same time instead of one piece after another, and housekeeping runs after a page is shown. Cancelling a request now also closes its approval steps. |

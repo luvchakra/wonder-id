@@ -2,14 +2,18 @@ import "server-only";
 
 import { supabaseServiceRole } from "@/lib/db/supabaseServer";
 import { getResendApiKey, getResendFromEmail } from "@/lib/db/env";
+import { safeErrorMessage } from "@/lib/security/redact";
+import { sendSmtpMail, type SmtpServer } from "@/modules/integrations/service";
 import type { NotifyEvent } from "@/lib/shared/types/operations";
+import { resolveTenantSmtp } from "./smtpSettings";
 
 const RESEND_SEND_URL = "https://api.resend.com/emails";
 
 /**
  * OPERATIONS-P0-02.1's email channel, resolved 2026-09-16 (user picked
- * Resend). Internal-only — never exported via modules/operations/service.ts;
- * notify() (./notifications.ts) is the only caller. Never throws: an email
+ * Resend); since 2026-10-20 an organization's own mail server when it has
+ * one (sendTenantEmail below). sendNotificationEmail is internal: notify()
+ * (./notifications.ts) is its only caller. Never throws: an email
  * delivery failure must never abort the in-app notification write that
  * triggered it, same never-fails-the-caller discipline as writeAudit()
  * and notify() itself.
@@ -19,41 +23,67 @@ const RESEND_SEND_URL = "https://api.resend.com/emails";
  * made for OpenAI/Gemini in lib/ai/summarize.ts).
  */
 export async function sendNotificationEmail(event: NotifyEvent): Promise<void> {
-  const apiKey = getResendApiKey();
-  const fromEmail = getResendFromEmail();
-  if (!apiKey || !fromEmail) return; // Not configured — in-app-only, no error.
-
   try {
+    const channel = await resolveChannel(event.tenantId);
+    if (!channel) return; // Not configured — in-app-only, no error.
     const recipients = await resolveEmailRecipients(event);
-    if (recipients.length === 0) return;
-
-    await Promise.all(
-      recipients.map(async (to) => {
-        const response = await fetch(RESEND_SEND_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            from: fromEmail,
-            to,
-            subject: event.title,
-            text: event.body,
-          }),
-        });
-        if (!response.ok) {
-          const detail = await response.text().catch(() => "");
-          console.error("sendNotificationEmail failed", {
-            type: event.type,
-            status: response.status,
-            detail: detail.slice(0, 500),
-          });
-        }
-      }),
-    );
+    await Promise.all(recipients.map((to) => deliver(channel, { to, subject: event.title, text: event.body }, event.type)));
   } catch (err) {
     console.error("sendNotificationEmail threw", { type: event.type, err });
+  }
+}
+
+/**
+ * One e-mail from an organization: through its own mail server when one is
+ * set up and turned on (Organization Settings › Email (SMTP), owner test
+ * feedback item 14), otherwise through WonderID's provider (Resend), as
+ * before. Returns whether it was sent; never throws. Not configured at all
+ * is "not sent", without an error.
+ */
+export async function sendTenantEmail(tenantId: string, message: Message): Promise<boolean> {
+  try {
+    const channel = await resolveChannel(tenantId);
+    return channel ? await deliver(channel, message, "email") : false;
+  } catch (err) {
+    console.error("sendTenantEmail threw", { err: safeErrorMessage(err) });
+    return false;
+  }
+}
+
+type Message = { to: string; subject: string; text: string };
+type Channel = { kind: "smtp"; server: SmtpServer; from: string } | { kind: "resend"; apiKey: string; from: string };
+
+async function resolveChannel(tenantId: string): Promise<Channel | null> {
+  const smtp = await resolveTenantSmtp(tenantId);
+  if (smtp) return { kind: "smtp", ...smtp };
+  const apiKey = getResendApiKey();
+  const from = getResendFromEmail();
+  return apiKey && from ? { kind: "resend", apiKey, from } : null;
+}
+
+async function deliver(channel: Channel, message: Message, label: string): Promise<boolean> {
+  try {
+    if (channel.kind === "smtp") {
+      await sendSmtpMail(channel.server, { from: channel.from, ...message });
+      return true;
+    }
+    const response = await fetch(RESEND_SEND_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${channel.apiKey}`,
+      },
+      body: JSON.stringify({ from: channel.from, ...message }),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.error("email delivery failed", { label, channel: channel.kind, status: response.status, detail: detail.slice(0, 500) });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("email delivery threw", { label, channel: channel.kind, err: safeErrorMessage(err) });
+    return false;
   }
 }
 

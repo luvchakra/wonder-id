@@ -1,7 +1,7 @@
 import "server-only";
 
 import { supabaseServiceRole } from "@/lib/db/supabaseServer";
-import { getResendApiKey, getResendFromEmail } from "@/lib/db/env";
+import { sendTenantEmail } from "@/modules/operations/service";
 import { writeAudit } from "@/lib/audit/writeAudit";
 import { listAssignableRoles } from "@/lib/rbac/roles";
 import { ApiError } from "@/lib/shared/types/foundation";
@@ -421,15 +421,14 @@ export async function inviteUser(
 }
 
 /**
- * The invitation e-mail. Delivered only when e-mail is configured
- * (Resend, as for notifications); it links to a set-password page on the
- * organization's own address. Never throws: a delivery failure is reported
- * as "not sent", and the person can still use "Forgot password".
+ * The invitation e-mail. Delivered only when e-mail is configured (the
+ * organization's own mail server, or WonderID's provider, as for
+ * notifications); it links to a set-password page on the organization's own
+ * address. Never throws: a delivery failure is reported as "not sent", and
+ * the person can still use "Forgot password".
  */
-async function sendInvitationEmail(v: ValidInvite, tenant: { name: string; url: string | null }, actor: { email: string | null }): Promise<boolean> {
-  const apiKey = getResendApiKey();
-  const from = getResendFromEmail();
-  if (!apiKey || !from || !tenant.url) return false;
+async function sendInvitationEmail(v: ValidInvite, tenant: { tenantId: string; name: string; url: string | null }, actor: { email: string | null }): Promise<boolean> {
+  if (!tenant.url) return false;
   try {
     const { data, error } = await supabaseServiceRole().auth.admin.generateLink({
       type: "recovery",
@@ -438,20 +437,14 @@ async function sendInvitationEmail(v: ValidInvite, tenant: { name: string; url: 
     });
     const link = data?.properties?.action_link;
     if (error || !link) return false;
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        from,
-        to: v.email,
-        subject: `You have been invited to ${tenant.name} on WonderID`,
-        text:
-          `${actor.email ?? "An administrator"} invited you to ${tenant.name} on WonderID.\n\n` +
-          `Set your password and sign in: ${link}\n\n` +
-          `Your organization's address: ${tenant.url}\n\nWonderID\nIDENTITIES • AGENTS • ACCESS • SECURITY\n`,
-      }),
+    return await sendTenantEmail(tenant.tenantId, {
+      to: v.email,
+      subject: `You have been invited to ${tenant.name} on WonderID`,
+      text:
+        `${actor.email ?? "An administrator"} invited you to ${tenant.name} on WonderID.\n\n` +
+        `Set your password and sign in: ${link}\n\n` +
+        `Your organization's address: ${tenant.url}\n\nWonderID\nIDENTITIES • AGENTS • ACCESS • SECURITY\n`,
     });
-    return res.ok;
   } catch {
     return false;
   }

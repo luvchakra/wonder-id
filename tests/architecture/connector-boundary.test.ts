@@ -45,7 +45,6 @@ const OUTBOUND_ALLOWED: Record<string, string> = {
   "modules/integrations/gateway/": "the Connector Gateway every connection's traffic passes (user requirement and approval, 2026-10-10)",
   "lib/ai/provider.ts": "WonderID's AI model provider (§19.3), not organization data",
   "modules/operations/email.ts": "WonderID's own email provider",
-  "lib/users/users.ts": "WonderID's own email provider (invitations)",
   // Added 2026-10-10 with record provenance (CLAUDE.md §19.10): the Supabase client's own transport, not an outbound call.
   "lib/security/actorHeader.ts": "WonderID's own database: the service-role client's fetch, adding the x-wonderid-actor header",
 };

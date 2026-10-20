@@ -36,6 +36,7 @@ const NO_CLIENT_POLICY: Record<string, string> = {
   // Secrets and machine credentials: only the service role, filtered by tenant in code (#10).
   integration_credentials: "encrypted secrets (0021)",
   platform_ai_provider_configs: "encrypted provider keys (0057)",
+  tenant_smtp_settings: "the organization's mail server and its encrypted password (0208)",
   agent_api_keys: "hashed agent keys (0061)",
   connector_receivers: "receiver credentials (0109)",
   connector_files: "uploaded files, service role with a tenant filter (0111)",

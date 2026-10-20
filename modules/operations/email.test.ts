@@ -47,13 +47,19 @@ vi.mock("@/lib/db/supabaseServer", () => ({
   supabaseServiceRole: () => ({ from: (table: string) => makeFrom(table) }),
 }));
 
-import { sendNotificationEmail } from "./email";
+const mockResolveTenantSmtp = vi.fn();
+vi.mock("./smtpSettings", () => ({ resolveTenantSmtp: (tenantId: string) => mockResolveTenantSmtp(tenantId) }));
+const mockSendSmtpMail = vi.fn();
+vi.mock("@/modules/integrations/service", () => ({ sendSmtpMail: (...args: unknown[]) => mockSendSmtpMail(...args) }));
+
+import { sendNotificationEmail, sendTenantEmail } from "./email";
 
 describe("sendNotificationEmail — OPERATIONS-P0-02.1 (Resend)", () => {
   const originalFetch = global.fetch;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveTenantSmtp.mockResolvedValue(null);
     memberships = [];
     users = [];
     preferences = [];
@@ -176,5 +182,37 @@ describe("sendNotificationEmail — OPERATIONS-P0-02.1 (Resend)", () => {
     await expect(
       sendNotificationEmail({ tenantId: "tenant-1", userId: "user-1", type: "critical_finding", title: "x", body: "y" }),
     ).resolves.toBeUndefined();
+  });
+
+  it("sends through the organization's own mail server when one is set up, not Resend", async () => {
+    mockGetResendApiKey.mockReturnValue("re_test_key");
+    mockGetResendFromEmail.mockReturnValue("notifications@wonderagent.example");
+    const server = { host: "smtp.example.com", port: 465, security: "ssl", username: "u", password: "p" };
+    mockResolveTenantSmtp.mockResolvedValue({ server, from: '"Acme" <it@acme.example>' });
+    mockSendSmtpMail.mockResolvedValue(undefined);
+    users = [{ id: "user-1", email: "user1@example.com" }];
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await sendNotificationEmail({ tenantId: "tenant-1", userId: "user-1", type: "critical_finding", title: "T", body: "B" });
+
+    expect(mockResolveTenantSmtp).toHaveBeenCalledWith("tenant-1");
+    expect(mockSendSmtpMail).toHaveBeenCalledWith(server, { from: '"Acme" <it@acme.example>', to: "user1@example.com", subject: "T", text: "B" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sendTenantEmail reports a failed SMTP send as not sent, without throwing", async () => {
+    mockResolveTenantSmtp.mockResolvedValue({ server: { host: "smtp.example.com", port: 587, security: "starttls", username: null, password: null }, from: "it@acme.example" });
+    mockSendSmtpMail.mockRejectedValue(new Error("535 authentication failed"));
+
+    await expect(sendTenantEmail("tenant-1", { to: "a@b.example", subject: "s", text: "t" })).resolves.toBe(false);
+  });
+
+  it("sendTenantEmail is not sent, without an error, when nothing is configured", async () => {
+    mockGetResendApiKey.mockReturnValue(null);
+    mockGetResendFromEmail.mockReturnValue(null);
+
+    await expect(sendTenantEmail("tenant-1", { to: "a@b.example", subject: "s", text: "t" })).resolves.toBe(false);
+    expect(mockSendSmtpMail).not.toHaveBeenCalled();
   });
 });

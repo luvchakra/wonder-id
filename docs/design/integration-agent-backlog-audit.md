@@ -3084,3 +3084,16 @@ reads at most 200 sources:
 
 Found by the 15 Oct E2E run: the E2E organization has 296 sources. See the
 QA entry of the same date.
+
+## 2026-10-20 — The smtp driver (owner test feedback item 14)
+
+`modules/integrations/framework/drivers/smtp.ts` (`sendSmtpMail`, published
+in `service.ts`) sends one message through an organization's own mail
+server, for Operations' e-mail channel (see the Operations audit log, same
+date). It uses nodemailer 10.0.15 (pinned, published 2026-10-05,
+`npm audit --omit=dev` clean): implicit TLS or required STARTTLS, TLS 1.2
+or later, certificate checked against the host name, connection, greeting
+and socket timeouts, and the host vetted by `resolveSafeHost` (the LDAP and
+SQL drivers' address guard), so a private or reserved address is refused.
+No allowlist of `tests/architecture/connector-boundary.test.ts` was
+widened; the test passes. Verified with the Operations tests named there.

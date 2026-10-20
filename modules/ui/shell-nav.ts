@@ -142,6 +142,7 @@ export const ADMIN_AREA: ShellNavItem = {
         page("Identity Rules", "/identities/rules", "identity.manage"),
         page("Classification Rules", "/access/classification-rules", "access.manage"),
         page("Notifications", "/settings/notifications", "notification.manage"),
+        page("Email (SMTP)", "/settings/email", "notification.manage"),
         page("AI Assistance", "/settings/ai", "ai.manage"),
         page("Billing & Subscription", "/settings/billing", "billing.view"),
       ],
