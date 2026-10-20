@@ -4435,3 +4435,28 @@ now returns each policy's `applicationId` (Access module, one more column,
 no new query). No new form controls (§19.5). Verified: eslint on the
 changed files, `npx vitest run modules/access-governance`, typecheck clean
 apart from the known missing-asset image errors of `app/welcome`.
+
+## 2026-10-20 — Admin-type pages moved from the main menu to Administration
+
+Owner request: "many of the menus in Home section (non-admin) actually
+qualify to be in Admin side instead. re-evaluate all menus in non-admin and
+move them to Admin if it makes more sense there." Every main-menu page was
+reviewed; the ones that configure the organization moved, the ones people use
+to do their own or day-to-day governance work stayed. `shell-nav.ts`:
+
+- Entitlements (`/access/entitlements`) and Onboard Application
+  (`/access/applications/new`) moved to Administration › Applications, next to
+  the Application Catalog and Onboarding Reviews they belong with.
+- Request Policies (`/access/request-policies`) moved to Administration ›
+  Policies & Controls.
+- Self Service now holds Register Agent only, and opens at `/agents/new`.
+
+Kept: My Workspace (personal), Request Access, All Requests, Provisioning
+Tasks and Access Packages (requesters and fulfillers browse them), AI Agents,
+Access Reviews and Risk & Detection (operational governance work, not
+organization configuration). Addresses and permissions are unchanged; only
+menu placement changed. Help guide (navigation, applications, entitlements,
+request policies) and knowledge base updated. Verified:
+`npx vitest run modules/ui` (16 files, 126 tests passed) and eslint on the
+changed files; typecheck clean apart from the known missing-asset image errors
+of `app/welcome`.

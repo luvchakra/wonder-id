@@ -75,15 +75,15 @@ The everyday cycle looks like this:
 - **Main menu:**
   - Home: the dashboard, a summary of the whole platform;
   - My Workspace: my requests, approvals waiting on me, my tasks, my privacy, sign-in security;
-  - Access: request access, all requests, provisioning, packages, entitlements, request policies;
+  - Access: request access, all requests, provisioning, packages;
   - AI Agents;
   - Access Reviews;
   - Risk & Detection: rogue accounts, rogue agents, SoD violations, investigations;
-  - Self Service: onboard an application, register an agent.
+  - Self Service: register an agent.
 - **Administration menu:** organization administration has its own sidebar. Open it with **Administration** at the bottom of the main menu, and use the back button to return. It holds:
   - Identities;
-  - Applications;
-  - Policies & Controls;
+  - Applications (including onboarding an application and the entitlement list);
+  - Policies & Controls (including request policies);
   - Reports & Audit;
   - Users & Roles;
   - Integrations;
@@ -698,6 +698,7 @@ Newest first.
 | Date | What changed |
 |---|---|
 | 20 Oct 2026 | Request Policies is simpler: choosing a scope opens its policy straight away, and the form has three parts (who can request, approval, how long access lasts). One "Approved by" choice lists your approval workflows and the built-in routes, replacing three separate fields. Each policy's name opens its form. |
+| 20 Oct 2026 | Entitlements and Onboard Application moved to Administration › Applications, and Request Policies to Administration › Policies & Controls, since configuring them is an administrator's job. Their pages and who can open them are unchanged. |
 | 20 Oct 2026 | An approval workflow's page links to the next step: each request policy that uses it opens at its own form, an unused workflow links to setting a request policy, and a line under the levels links to where its approvers are set (managers, owners, groups, access managers). |
 | 20 Oct 2026 | Approval Workflows moved from the Access menu to Administration › Integrations, since setting them up is an administrator's job. |
 | 20 Oct 2026 | Organization Settings has a new Email (SMTP) page: the organization's notifications and invitations can be sent through its own mail server, with a test e-mail to check the settings. |
