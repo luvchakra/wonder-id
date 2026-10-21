@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTenantContext } from "@/lib/tenant/getTenantContext";
 import { summarize, AiNotConfiguredError } from "@/lib/ai/summarize";
 import type { AiSummaryKind } from "@/lib/shared/types/ai";
+import { limitMember } from "@/lib/security/rateLimiter";
 
 /**
  * EXPERIENCE-P0-14 — the one route wrapping Foundation's `lib/ai/summarize`
@@ -52,6 +53,9 @@ export async function POST(request: Request) {
   if (!ctx.permissions.includes(permission)) {
     return NextResponse.json({ ok: false, error: { code: "FORBIDDEN", message: `Missing permission: ${permission}` } }, { status: 403 });
   }
+
+  const limited = await limitMember("member:ai-summarize", ctx.userId);
+  if (limited) return limited;
 
   try {
     const result = await summarize(ctx.tenantId!, { kind: kind as AiSummaryKind, data: data as Record<string, unknown> });

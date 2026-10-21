@@ -29,6 +29,9 @@ export const metadata: Metadata = {
   // light status bar. Next emits `mobile-web-app-capable`; older iOS reads
   // only the apple- form. The manifest link comes from app/manifest.ts.
   appleWebApp: { capable: true, title: wonderIdBrand.name, statusBarStyle: "default" },
+  // Not indexed or used for AI training by default (owner request
+  // 2026-10-21); the marketing page opts back in to indexing.
+  robots: { index: false, follow: false, noimageindex: true, nocache: true },
   other: { "apple-mobile-web-app-capable": "yes" },
 };
 

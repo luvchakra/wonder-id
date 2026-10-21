@@ -1119,3 +1119,10 @@ content test keeps WonderID's own vendors out of customer text. Verified: `npx v
 (10 passed: every preset passes `checkSmtpSettings`; host matching), eslint
 on the changed files, typecheck clean apart from the known `app/welcome`
 image errors.
+
+## 2026-10-21 — Per-person limit on CSV exports
+
+`GET /api/v1/exports/:object` calls `limitMember("member:export", …)` after
+its permission checks: 30 exports an hour per person, then 429 with
+`Retry-After`. Part of the AI reverse-engineering hardening; detail in the
+Foundation audit log, same date.

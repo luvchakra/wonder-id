@@ -182,6 +182,7 @@ What WonderID does today and what comes next, phase by phase. Built from the [kn
 ## 13. Release readiness — 100%
 
 - ✅ Security hardening pass
+- ✅ Protection against AI-assisted copying (robots.txt, noindex, per-person limits, client-bundle guard)
 - ✅ Brownfield customer rehearsal
 
 ---

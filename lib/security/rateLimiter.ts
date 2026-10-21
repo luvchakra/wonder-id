@@ -1,5 +1,6 @@
 import "server-only";
 
+import { NextResponse } from "next/server";
 import { supabaseServiceRole } from "@/lib/db/supabaseServer";
 
 export type RateLimitResult = { allowed: boolean; retryAfterSeconds?: number };
@@ -74,4 +75,40 @@ export async function checkAndRecordAttempt(
 
   await supabase.from("auth_rate_limit_attempts").insert({ bucket, subject });
   return { allowed: true };
+}
+
+/**
+ * Per-member limits on the endpoints that hand out the most in one call:
+ * the AI help assistant, AI summaries and CSV exports (owner request
+ * 2026-10-21, AI reverse-engineering hardening). They are generous, so a
+ * real administrator never meets them; a script crawling the product
+ * through one account does. Search is left to the edge firewall: it runs on
+ * every keystroke, and three more round trips there would break the
+ * performance rules (CLAUDE.md §15.1).
+ */
+export const MEMBER_LIMITS = {
+  "member:help-ask": { maxAttempts: 60, windowSeconds: 60 * 60 },
+  "member:ai-summarize": { maxAttempts: 60, windowSeconds: 60 * 60 },
+  "member:export": { maxAttempts: 30, windowSeconds: 60 * 60 },
+} as const;
+
+export type MemberLimitBucket = keyof typeof MEMBER_LIMITS;
+
+/**
+ * Records one call by `userId` (the session's user, never a client value)
+ * and returns a 429 response once the member is over the limit, or null to
+ * go on. A failed limiter read counts as under the limit: this throttles
+ * abuse, it is not an authorization check, and the route's permission
+ * gate still applies.
+ */
+export async function limitMember(bucket: MemberLimitBucket, userId: string): Promise<NextResponse | null> {
+  if (!userId) return null;
+  const result = await checkAndRecordAttempt(bucket, userId, MEMBER_LIMITS[bucket]);
+  if (result.allowed) return null;
+  console.warn("rate limit reached", { bucket, userId });
+  const retryAfter = String(result.retryAfterSeconds ?? MEMBER_LIMITS[bucket].windowSeconds);
+  return NextResponse.json(
+    { ok: false, error: { code: "RATE_LIMITED", message: "Too many requests. Try again later." } },
+    { status: 429, headers: { "Retry-After": retryAfter, "Cache-Control": "no-store" } },
+  );
 }

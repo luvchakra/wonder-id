@@ -3782,3 +3782,32 @@ One difference: a failed read now leaves the person with no organization
 (`unavailable`), where before a failed role read kept the organization but
 no permissions. Both cases permit nothing. Detail and verification are in
 the QA audit log.
+
+## 2026-10-21 — Protection against AI-assisted reverse engineering (owner request)
+
+The owner asked for ways to stop other people using AI to copy the product,
+then for the controls to be applied. Audit of what is exposed:
+`https://claude.ai/artifact/PRvQnUPLatiXezduP1Euo6`. Changed here:
+
+- `lib/security/rateLimiter.ts`: `limitMember()` with `MEMBER_LIMITS`, per
+  signed-in user, on the existing `auth_rate_limit_attempts` store: help
+  assistant 60 an hour, AI summaries 60, CSV exports 30. Over the limit:
+  429, `Retry-After`, a `rate limit reached` warning in the logs. A failed
+  limiter read lets the call through (throttling, not authorization; the
+  permission gates still apply). Search is left to the edge firewall
+  because it runs per keystroke (§15.1).
+- `lib/ai/helpAnswer.ts`: the help assistant's system prompt treats the
+  question as data and refuses to reveal its instructions, the excerpts word
+  for word or how the product is built (§17.2).
+- `proxy.ts`: `robots.txt` is outside the matcher (it redirected, 307).
+  `app/robots.ts` allows only `/` and `/welcome` for search engines and
+  disallows the whole site for 19 AI crawlers. The root layout marks every
+  page `noindex, nofollow, noimageindex, nocache`; `/welcome` opts back in.
+
+Verified: `npx vitest run lib/security/rateLimiter.test.ts
+lib/ai/helpAnswer.test.ts proxy.test.ts tests/architecture/client-bundle.test.ts`
+and the route-gate sweep, typecheck and eslint on the changed files (counts
+in the QA entry). Not done here, owner actions: making the GitHub repository
+private, the Vercel firewall and bot protection, legal review of
+`docs/legal/TERMS-DRAFT.md`, and the sign-up decision. The terms checkbox at
+sign-up waits for the reviewed terms.

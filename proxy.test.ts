@@ -142,6 +142,11 @@ describe("proxy matcher (which paths skip the session check)", () => {
     expect(matches("/apple-icon.png")).toBe(false);
   });
 
+  it("serves robots.txt to crawlers without a session", () => {
+    // Behind the proxy it redirected (307) instead of serving the file.
+    expect(matches("/robots.txt")).toBe(false);
+  });
+
   it("still runs on every page and API route", () => {
     for (const path of ["/", "/sign-in", "/agents", "/platform-admin", "/api/v1/search", "/manifest"]) expect(matches(path), path).toBe(true);
   });
