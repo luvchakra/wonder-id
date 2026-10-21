@@ -4,11 +4,14 @@ import { requirePermission } from "@/lib/rbac/requirePermission";
 import { listEntitlementInventory } from "@/modules/access-governance/service";
 import { ApiError } from "@/lib/shared/types/foundation";
 import { Badge, Button, Card, EmptyState, LinkButton, TableContainer, Td, Th, Thead, Tr, fieldInputClass, fieldLabelClass } from "@/modules/ui";
-import { EntitlementGovernanceEdit } from "./EntitlementGovernanceEdit";
 
 // Admin › Entitlements (owner request, 2026-10-10): every entitlement in
 // the organization, across applications, paged at the database (§15).
-// An entitlement is created and changed on its application's page.
+// An entitlement is created and changed on its application's page; each
+// name opens that page's Entitlements tab (owner feedback, 21 Oct: one
+// column per attribute, no inline edit here).
+
+const RISK_TONE = { low: "neutral", medium: "info", high: "warning", critical: "danger" } as const;
 
 const PAGE_SIZE = 50;
 
@@ -24,7 +27,6 @@ export default async function EntitlementsPage({ searchParams }: { searchParams:
   const q = (sp.q ?? "").slice(0, 100);
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
   const { rows, total } = await listEntitlementInventory(ctx.tenantId!, { q, page, pageSize: PAGE_SIZE });
-  const canManage = ctx.permissions.includes("access.manage");
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const href = (p: number) => {
     const u = new URLSearchParams();
@@ -65,42 +67,50 @@ export default async function EntitlementsPage({ searchParams }: { searchParams:
               <Thead>
                 <tr>
                   <Th>Entitlement</Th>
+                  <Th>Type</Th>
                   <Th>Application</Th>
+                  <Th hideBelow="lg">Risk</Th>
                   <Th hideBelow="lg">Privilege</Th>
-                  <Th hideBelow="xl">Data</Th>
+                  <Th hideBelow="xl">Requestable</Th>
+                  <Th hideBelow="xl">SOX</Th>
+                  <Th hideBelow="2xl">Data</Th>
+                  <Th hideBelow="xl">Status</Th>
                 </tr>
               </Thead>
               <tbody>
-                {rows.map((e) => (
-                  <Tr key={e.id}>
-                    <Td>
-                      <span className="font-medium text-foreground">{e.name}</span>
-                      <span className="mt-0.5 flex flex-wrap gap-1">
-                        {e.entitlementType ? <Badge tone="info">{e.entitlementType}</Badge> : null}
-                        {e.requestable === false ? <Badge tone="neutral">Not requestable</Badge> : null}
-                        {e.soxRelevant ? <Badge tone="warning">SOX</Badge> : null}
-                      </span>
-                      {canManage ? (
-                        <EntitlementGovernanceEdit id={e.id} name={e.name} entitlementType={e.entitlementType ?? null} requestable={e.requestable !== false} soxRelevant={Boolean(e.soxRelevant)} />
-                      ) : null}
-                    </Td>
-                    <Td>
-                      <Link href={`/access/applications/${e.applicationRef ?? e.applicationId}`} className="text-primary hover:underline">
-                        {e.applicationDisplayName ?? e.applicationName}
-                      </Link>
-                    </Td>
-                    <Td hideBelow="lg">
-                      {e.privilegeLevel === "standard" ? (
-                        <span className="text-muted-foreground">Standard</span>
-                      ) : (
-                        <Badge tone={e.privilegeLevel === "admin" ? "danger" : "warning"}>{e.privilegeLevel === "admin" ? "Admin" : "Elevated"}</Badge>
-                      )}
-                    </Td>
-                    <Td hideBelow="xl">
-                      <span className="text-sm text-muted-foreground">{e.dataClassification ?? "—"}</span>
-                    </Td>
-                  </Tr>
-                ))}
+                {rows.map((e) => {
+                  const appHref = `/access/applications/${e.applicationRef ?? e.applicationId}`;
+                  return (
+                    <Tr key={e.id}>
+                      <Td>
+                        <Link href={`${appHref}?tab=entitlements`} className="font-medium text-primary hover:underline">
+                          {e.displayName || e.name}
+                        </Link>
+                        {e.displayName && e.displayName !== e.name ? <span className="block text-xs text-muted-foreground">{e.name}</span> : null}
+                      </Td>
+                      <Td>{e.entitlementType ? <Badge tone="info">{e.entitlementType}</Badge> : <span className="text-muted-foreground">—</span>}</Td>
+                      <Td>
+                        <Link href={appHref} className="text-primary hover:underline">
+                          {e.applicationDisplayName ?? e.applicationName}
+                        </Link>
+                      </Td>
+                      <Td hideBelow="lg">{e.riskLevel ? <Badge tone={RISK_TONE[e.riskLevel]}>{e.riskLevel}</Badge> : <span className="text-muted-foreground">—</span>}</Td>
+                      <Td hideBelow="lg">
+                        {e.privilegeLevel === "standard" ? (
+                          <span className="text-muted-foreground">Standard</span>
+                        ) : (
+                          <Badge tone={e.privilegeLevel === "admin" ? "danger" : "warning"}>{e.privilegeLevel === "admin" ? "Admin" : "Elevated"}</Badge>
+                        )}
+                      </Td>
+                      <Td hideBelow="xl">{e.requestable === false ? <span className="text-muted-foreground">No</span> : "Yes"}</Td>
+                      <Td hideBelow="xl">{e.soxRelevant ? <Badge tone="warning">SOX</Badge> : <span className="text-muted-foreground">—</span>}</Td>
+                      <Td hideBelow="2xl">
+                        <span className="text-sm text-muted-foreground">{e.dataClassification ?? "—"}</span>
+                      </Td>
+                      <Td hideBelow="xl">{e.status === "inactive" ? <Badge tone="neutral">Disabled</Badge> : <span className="text-muted-foreground">Active</span>}</Td>
+                    </Tr>
+                  );
+                })}
               </tbody>
             </TableContainer>
           )}

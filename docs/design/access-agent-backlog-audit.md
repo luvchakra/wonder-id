@@ -4835,3 +4835,38 @@ the application's technical owner; new `listPackageAssignmentsForReview`
 lists live business-role assignments by package, person or application.
 Revoke decisions use the existing `revokeAssignment`. Service role, every
 query filtered by tenant. Verified by the compliance and access unit tests.
+
+## 2026-10-21 — Entitlements table, waiting policy changes in one row, an administrator approves their own change (owner feedback)
+
+Owner's test feedback, three items:
+
+1. **Entitlements (Admin › Applications › Entitlements).** "The entitlement
+   value should be clickable … add entitlement type as a column, and other
+   relevant columns. Remove the edit option." Each name now opens its
+   application's Entitlements tab (`?tab=entitlements`), where it is edited;
+   the columns are Entitlement, Type, Application, Risk, Privilege,
+   Requestable, SOX, Data and Status (the less important hidden on smaller
+   screens). The inline Edit (`EntitlementGovernanceEdit.tsx`) is removed;
+   the governance API it called stays.
+2. **Waiting request-policy changes** are a table, one row per change: the
+   policy, new or change, who and when; the fields in the form's words with
+   values in words and the approval workflow by name (`changeLabels.ts`,
+   tested); and the decision.
+3. **Owner decision (2026-10-21): a Tenant Administrator may approve their
+   own request-policy change**, as for onboarding (2026-10-14, migration
+   0188). A note is required; it is stored as `self_approved` and audited
+   with `selfApproved: true`. Nobody rejects their own change, and anyone
+   else still needs a second person. Enforced in `decisionRefusal()`
+   (tested), the service, and the database: migration **0211** replaces the
+   four-eyes check with one allowing decider = proposer only when
+   `self_approved`, `status = 'approved'` and a note are all set.
+
+**Verified:** `governanceChangeRules.test.ts` (4) and `changeLabels.test.ts`
+(2) pass; `modules/access-governance`, `app/(customer)/access` and
+`app/(customer)/identities`: 46 files, 402 passed. Typecheck and eslint
+clean. Migration 0211 applied to production; `tests/access/governance-changes-isolation.sql`
+run live with the new cases: proposer deciding 23514, self-marked rejection
+23514, self-approval without a note 23514, self-approval with a note
+allowed, X sees 1, another organization 0 (all as expected, rolled back).
+`governance-changes.spec.ts` updated (own approval without a note 400, own
+rejection 409, the note field shown); E2E runs in the nightly.

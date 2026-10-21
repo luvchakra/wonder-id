@@ -210,10 +210,11 @@ export default async function IdentityDetailPage({ params, searchParams }: { par
     ...(ledger ? [{ value: "access", label: "Access", count: ledger.entries.length }] : []),
     ...(groups ? [{ value: "groups", label: "Groups", count: groups.length }] : []),
     ...(findings ? [{ value: "risk", label: "Risk", count: findings.filter((f) => !["resolved", "false_positive"].includes(f.status)).length }] : []),
-    ...(activity ? [{ value: "activity", label: "Audit history" }] : []),
     { value: "relationships", label: "Relationships", count: current.length },
     { value: "attributes", label: "Attributes", count: storedKeys.length },
     ...(canManage ? [{ value: "edit", label: "Edit" }] : []),
+    // Owner feedback (21 Oct): the audit history is the last tab.
+    ...(activity ? [{ value: "activity", label: "Audit history" }] : []),
   ];
 
   return (
