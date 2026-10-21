@@ -38,7 +38,7 @@ export default async function PlatformCareersPage() {
       <Card>
         <CardHeader title="WonderJobs connection" description={source} actions={badge} />
         <CardBody>
-          <ConnectionForm hasSavedKey={connection?.source === "console"} baseUrl={connection?.source === "console" ? connection.baseUrl : null} />
+          <ConnectionForm keyHint={connection?.keyHint ?? null} source={connection?.source ?? "none"} baseUrl={connection?.source === "console" ? connection.baseUrl : null} />
         </CardBody>
       </Card>
       <Card>

@@ -1477,3 +1477,15 @@ typecheck clean apart from the known `app/welcome` image errors, Supabase
 security advisor after the migration (only the expected "RLS enabled, no
 policy" info for the new vendor table). The console page needs a platform
 administrator session, so it was not opened locally.
+
+## 2026-10-21 — Careers: the saved key shows masked (owner feedback)
+
+After saving the key, the form's box went empty, so it wasn't clear a key was
+set. With a key set, the WonderJobs connection card now shows it as a
+read-only masked field (`wjcs_••••••••••••` and its last four characters, the
+only part kept in clear) with Replace key; the empty box appears only when
+there is no key or on Replace (Cancel closes it, a successful save closes it,
+a refused key keeps it open). The key itself still never reaches the browser.
+Verified: `npx vitest run "app/platform-admin/(console)/careers"
+app/actions/platformCareers.test.ts` (7 passed; new ConnectionForm.test.tsx),
+eslint and typecheck clean.
