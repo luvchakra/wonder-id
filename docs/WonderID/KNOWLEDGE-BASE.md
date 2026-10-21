@@ -106,6 +106,7 @@ The everyday cycle looks like this:
 
 **One directory for every identity:** people (employees and contractors), external users, service accounts, machines, workloads, applications, APIs and AI agents.
 - **Where:** Admin → Identity Repository → Identities.
+- **Audit history:** each identity's page has an Audit history tab (for those who can read the audit log). It lists the latest 100 changes to the identity, its WonderID sign-in, its accounts and the access requests for it, with who made each and when. For a person's details it names the fields that changed, not the values: personal data stays out of the permanent audit trail.
 
 **Owners**
 - Every non-human identity, such as a service account or an AI agent, has a responsible person.
@@ -708,6 +709,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 21 Oct 2026 | An identity's page has an Audit history tab: the latest 100 changes to the identity, its sign-in, its accounts and the access requests for it, in plain words, with who made each change and when. |
 | 21 Oct 2026 | Careers: open positions on the home page and at `/careers`, with an application form. Jobs, applications and every email are run by WonderJobs; the vendor console has a Careers page. |
 | 21 Oct 2026 | Usage limits against automated copying: per person, 60 help-assistant questions, 60 AI summaries and 30 CSV exports an hour. Only the public home page may be indexed by search engines, and AI crawlers are asked to stay away. |
 | 20 Oct 2026 | New built-in connection type, Generic REST API: connect any REST/JSON API by describing its sign-in, requests, paging, field mappings and changes in the connection's own settings, with no connection type to write. |

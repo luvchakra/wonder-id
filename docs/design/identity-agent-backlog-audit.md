@@ -2360,3 +2360,32 @@ manager change, conversion or rehire event; the lifecycle service then
 calls Compliance's `launchCampaignsForLifecycleEvent()` (loaded at call
 time, never throws), after the event, its tasks and birthright work.
 Nothing else in the lifecycle flow changed.
+
+## 2026-10-21 — An identity's Audit history tab (owner feedback)
+
+Owner's test feedback: "Add audit history tab here, it should capture every
+change that happens to this identity".
+
+**Changed:**
+- The identity page's Activity tab is now **Audit history**. It covers the
+  identity, its user and agent (as before), plus its accounts and the access
+  requests for it (`identityRelatedObjectIds()`, Access module: two indexed
+  reads, at most 100 each), up to the latest 100 events.
+- Each line is in plain words (`describeAuditEvent()`,
+  `app/(customer)/identities/history.ts`): a title per action, the fields
+  that changed or a status from and to, who did it (a name, "a connection" or
+  WonderID) and the time in UTC. Actor names come from
+  `listObjectHistory()` (Operations), which reads the events as the user
+  under RLS and the tenant filter, then looks up only those actors' names.
+- The chain (related ids, then events) runs alongside the page's other
+  reads, so the page gains no sequential wave.
+
+**Deliberately not done:** values are not recorded. `updateIdentity()`
+audits field names only (personal data stays out of the append-only,
+hash-chained audit log: §17.7, §18.3.3, erasure never touches it); the
+history says which fields changed.
+
+**Verified:** `history.test.ts` (4 passed); typecheck (only the
+pre-existing image-module errors of a checkout without `next-env.d.ts`);
+eslint on the changed files; `identities.spec.ts` updated to the tab's new
+name, run in tonight's nightly (owner instruction: E2E only at night).

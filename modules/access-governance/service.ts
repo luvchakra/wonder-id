@@ -93,6 +93,7 @@ export {
   getAccountSummary,
   getInventoryAccount,
   linkAccount,
+  identityRelatedObjectIds,
   requestAccountRematch,
   listReconciliationRuns,
   reconcileApplicationAccounts,
