@@ -1430,3 +1430,14 @@ that a file with an added attribute is refused (nightly).
 
 **Left:** bundles for request policies, identity rules and templates; the
 Configuration Studio's draft/simulate/approve.
+
+## 2026-10-21 — Platform console: Careers (owner request)
+
+`/platform-admin/careers` (console nav: Careers) shows whether WonderID's
+careers page is connected to WonderJobs (Connected, Needs setup or
+Unavailable), the positions live on it now, setup steps when the key is
+missing, and "Manage jobs in WonderJobs", which opens WonderJobs' Hiring
+section where a platform administrator posts jobs, ticks "On WonderID
+careers" and handles applications. It reads EA's `modules/careers`; no table,
+no tenant data, behind the console's platform-admin layout (#3). Verified with
+the Experience entry's checks.

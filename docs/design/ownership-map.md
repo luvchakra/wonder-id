@@ -393,6 +393,11 @@ and OA's `listAuditLogs()`; `/access/entitlements` composes AA's
 AA's policy, SoD and request-policy reads, FA's `listAuthorizationPolicies()`
 and OA's `listAuditLogs()`. The sidebar's areas are EA's `modules/ui/shell-nav.ts`.
 
+2026-10-21 (careers page, owner request): `/careers`, `/careers/[id]`, `/careers/status`, the landing
+page's Careers section and `app/welcome/MarketingChrome.tsx` are EA's, over EA's `modules/careers`
+(the server-only WonderJobs careers client; no table, no tenant data). `/platform-admin/careers` is
+PA's page over the same module. Jobs and applications are stored and run by WonderJobs, not WonderID.
+
 ## 4. Shared TypeScript contracts
 
 Location: `lib/shared/types/`.

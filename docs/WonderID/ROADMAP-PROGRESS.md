@@ -4,7 +4,7 @@ What WonderID does today and what comes next, phase by phase. Built from the [kn
 
 ✅ done · 🔶 partly done · ⬜ not started · progress counts partly done as half
 
-**Overall: 67%** `███████░░░`
+**Overall: 68%** `███████░░░`
 
 | # | Phase | Progress |
 |---|---|---|
@@ -184,6 +184,7 @@ What WonderID does today and what comes next, phase by phase. Built from the [kn
 - ✅ Security hardening pass
 - ✅ Protection against AI-assisted copying (robots.txt, noindex, per-person limits, client-bundle guard)
 - ✅ Brownfield customer rehearsal
+- ✅ Careers page with applications, run by WonderJobs
 
 ---
 Updated with every merge: change an item's mark, run `npm run roadmap` to recompute the percentages, and commit both in the same pull request.
