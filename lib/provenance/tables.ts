@@ -14,6 +14,7 @@ export const PROVENANCE_TABLES = [
   "sso_connections",
   "tenant_settings",
   "tenant_smtp_settings",
+  "platform_careers_connection",
   "tenant_domains",
   "agent_api_keys",
   "feature_flags",

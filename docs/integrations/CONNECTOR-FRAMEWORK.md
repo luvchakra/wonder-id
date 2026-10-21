@@ -36,8 +36,9 @@ the owner asked for it to be run by WonderJobs: jobs posted in WonderJobs
 show on `/careers`, and applications go to WonderJobs. One file,
 `modules/careers/wonderjobs.ts`, was added to the outbound allowlist for it,
 like the email and AI providers: server only, a fixed https
-`*.wonderapps.biz` host, the career-site key from `WONDERJOBS_CAREERS_KEY`,
-a timeout and one retry on reads.
+`*.wonderapps.biz` host, the career-site key (saved encrypted in the vendor
+console, `platform_careers_connection`, else `WONDERJOBS_CAREERS_KEY`), a
+timeout and one retry on reads.
 
 ## The Connector Gateway
 
