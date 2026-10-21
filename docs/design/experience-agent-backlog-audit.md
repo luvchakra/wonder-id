@@ -4524,3 +4524,15 @@ files, typecheck clean apart from the known `app/welcome` image errors. Ran
 status page and the landing section at 1280 px light and 390 px dark (no
 horizontal scroll at 390, 1024 and 1280), and submitted the Apply form end to
 end. New nightly spec `tests/e2e/careers.spec.ts`.
+
+## 2026-10-21 — Careers: Share on each job page (owner request)
+
+`/careers/[id]` gets Share beside Apply (`app/careers/[id]/ShareJob.tsx`):
+on a touch device the system share sheet (`navigator.share`; dismissing it is
+not an error), elsewhere a menu with Copy link, LinkedIn, WhatsApp, X and
+Email, all carrying the job page's own address. The page's metadata now has
+a canonical address, Open Graph and Twitter card (title, facts and the first
+160 characters of the description, with the brand image, since a page's
+openGraph replaces the site's), so a shared link previews the job. Verified:
+`npx vitest run app/careers modules/careers` (12 passed, new
+ShareJob.test.tsx), eslint and typecheck clean.

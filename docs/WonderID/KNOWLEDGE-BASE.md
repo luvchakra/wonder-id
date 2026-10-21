@@ -188,6 +188,7 @@ All information from your systems reaches WonderID through **connections**. Ther
 
 | Kind of system | Built-in types |
 |---|---|
+| 21 Oct 2026 | Careers: each position has a Share button (the phone's share sheet, or Copy link, LinkedIn, WhatsApp, X and Email), and shared links preview the job's title and summary. |
 | 21 Oct 2026 | Vendor console › Careers: the WonderJobs key for the careers page is pasted and checked there, saved encrypted, and works at once without a deployment. |
 | HR | Frappe HR |
 | Directories and identity providers | Active Directory (people, accounts, managed service accounts, groups; can also add and remove group members), LDAP directory (which can also add and remove group members), Keycloak, Saviynt, and any identity provider or HR system that pushes people over SCIM 2.0 |

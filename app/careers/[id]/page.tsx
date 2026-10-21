@@ -5,6 +5,8 @@ import { ArrowLeft } from "lucide-react";
 import { descriptionBlocks, jobFacts } from "@/modules/careers/format";
 import { getCareerJob } from "@/modules/careers/wonderjobs";
 import { ApplyForm } from "./ApplyForm";
+import { ShareJob } from "./ShareJob";
+import { wonderIdBrand } from "@/modules/ui";
 
 export const revalidate = 300;
 
@@ -12,7 +14,18 @@ type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const r = await getCareerJob((await params).id);
-  return r.state === "ok" ? { title: { absolute: `${r.data.title} · Careers · WonderID` }, description: r.data.description.slice(0, 160) } : { title: { absolute: "Careers · WonderID" } };
+  if (r.state !== "ok") return { title: { absolute: "Careers · WonderID" } };
+  // What a shared link shows in LinkedIn, WhatsApp, Slack and the like.
+  const title = `${r.data.title} · WonderID`;
+  const description = `${jobFacts(r.data)}. ${r.data.description.replace(/\s+/g, " ").slice(0, 160)}`;
+  return {
+    title: { absolute: `${r.data.title} · Careers · WonderID` },
+    description,
+    alternates: { canonical: `/careers/${encodeURIComponent(r.data.id)}` },
+    // A page's openGraph replaces the site's, so the brand image is named again here.
+    openGraph: { title, description, type: "website", url: `/careers/${encodeURIComponent(r.data.id)}`, images: [{ url: wonderIdBrand.assets.social.src, width: wonderIdBrand.assets.social.width, height: wonderIdBrand.assets.social.height, alt: wonderIdBrand.name }] },
+    twitter: { card: "summary_large_image", title, description, images: [wonderIdBrand.assets.social.src] },
+  };
 }
 
 export default async function CareerJobPage({ params }: Props) {
@@ -30,10 +43,11 @@ export default async function CareerJobPage({ params }: Props) {
           <>
             <h1 className="mt-6 text-3xl font-semibold tracking-[-0.02em] text-foreground sm:text-4xl">{r.data.title}</h1>
             <p className="mt-3 text-sm text-muted-foreground">{jobFacts(r.data)}</p>
-            <div className="mt-6">
+            <div className="mt-6 flex flex-wrap items-center gap-3">
               <a href="#apply" className="inline-flex h-10 items-center rounded-full bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
                 Apply
               </a>
+              <ShareJob title={r.data.title} path={`/careers/${encodeURIComponent(r.data.id)}`} />
             </div>
             <div className="mt-10 max-w-none space-y-4 text-base leading-relaxed text-foreground">
               {descriptionBlocks(r.data.description).map((b, i) =>
