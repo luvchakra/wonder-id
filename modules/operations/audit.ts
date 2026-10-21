@@ -1,6 +1,6 @@
 import "server-only";
 
-import { supabaseServer } from "@/lib/db/supabaseServer";
+import { supabaseServer, supabaseServiceRole } from "@/lib/db/supabaseServer";
 import { ApiError } from "@/lib/shared/types/foundation";
 import type { AuditLogEntry, AuditLogFilter, AuditLogPage } from "@/lib/shared/types/operations";
 import { toAuditLogEntry } from "./mappers";
@@ -88,4 +88,22 @@ export async function listObjectActivity(tenantId: string, objectIds: string[], 
     .limit(Math.min(Math.max(limit, 1), MAX_PAGE_SIZE));
   if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
   return (data ?? []).map(toAuditLogEntry);
+}
+
+/**
+ * Owner feedback (21 Oct): an object's audit history with the name of whoever
+ * acted. The events are read as the user under RLS, filtered on the tenant
+ * (listObjectActivity); only the actor ids those events name are then looked
+ * up in the global users table, for their names alone (the pattern of record
+ * provenance). Someone no longer there is "A former member".
+ */
+export async function listObjectHistory(tenantId: string, objectIds: string[], limit = 100): Promise<(AuditLogEntry & { actorName: string | null })[]> {
+  const entries = await listObjectActivity(tenantId, objectIds, limit);
+  const actorIds = [...new Set(entries.filter((e) => e.actorType === "user" && e.actorId).map((e) => e.actorId as string))];
+  const names = new Map<string, string>();
+  if (actorIds.length) {
+    const { data } = await supabaseServiceRole().from("users").select("id, email, display_name").in("id", actorIds);
+    for (const p of (data ?? []) as { id: string; email: string | null; display_name: string | null }[]) names.set(p.id, p.display_name || p.email || "A former member");
+  }
+  return entries.map((e) => ({ ...e, actorName: e.actorType === "user" && e.actorId ? (names.get(e.actorId) ?? "A former member") : null }));
 }

@@ -9,7 +9,7 @@ import "server-only";
  * Integration) is expected to call at the moment its own event occurs.
  */
 
-export { listAuditLogs, exportAuditLogs, listObjectActivity } from "./audit";
+export { listAuditLogs, exportAuditLogs, listObjectActivity, listObjectHistory } from "./audit";
 export { toCsv } from "./csv";
 export { sendTenantEmail, tenantEmailSender } from "./email";
 export { getSmtpSettings, saveSmtpSettings, removeSmtpSettings, sendSmtpTest, type SmtpSettingsView } from "./smtpSettings";

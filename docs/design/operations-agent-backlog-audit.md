@@ -1126,3 +1126,11 @@ image errors.
 its permission checks: 30 exports an hour per person, then 429 with
 `Retry-After`. Part of the AI reverse-engineering hardening; detail in the
 Foundation audit log, same date.
+
+## 2026-10-21 — `listObjectHistory()`: an object's audit events with actor names
+
+For the identity page's Audit history tab (owner feedback, 21 Oct; detail in
+the Identity audit log). It wraps `listObjectActivity()` (as the user, under
+RLS, tenant-filtered, `audit_logs_tenant_object_idx`) and names the user
+actors those events carry, from the global users table, names only (the
+record-provenance pattern). No new writer; `writeAudit()` stays the only one.

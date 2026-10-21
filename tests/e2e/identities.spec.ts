@@ -153,17 +153,17 @@ test.describe.serial("identity directory", () => {
     await expect(page.getByRole("link", { name: `svc-e2e-${stamp}` })).toHaveAttribute("href", /^\/identities\/\d+$/);
   });
 
-  test("IDENTITY-P0-17: a person's page shows their groups, findings and activity", async ({ page }) => {
+  test("IDENTITY-P0-17: a person's page shows their groups, findings and audit history", async ({ page }) => {
     await page.goto(`/identities/${adminPersonId}`);
     // FOUNDATION-P0-34: an old link with the id redirects to the identity's number.
     await expect(page).toHaveURL(/\/identities\/\d+$/);
     const tabs = page.getByRole("tablist", { name: "Identity sections" });
-    for (const name of [/^Groups/, /^Risk/, /^Activity/]) await expect(tabs.getByRole("tab", { name })).toBeVisible();
+    for (const name of [/^Groups/, /^Risk/, /^Audit history/]) await expect(tabs.getByRole("tab", { name })).toBeVisible();
     await tabs.getByRole("tab", { name: /^Groups/ }).click();
     await expect(page.getByRole("tabpanel").getByText(/In no groups|ID roles:|No ID roles/).first()).toBeVisible();
     await tabs.getByRole("tab", { name: /^Risk/ }).click();
     await expect(page.getByRole("tabpanel").getByText(/No findings|found \d{4}-/).first()).toBeVisible();
-    await tabs.getByRole("tab", { name: /^Activity/ }).click();
+    await tabs.getByRole("tab", { name: /^Audit history/ }).click();
     await expect(page.getByRole("tabpanel").getByRole("link", { name: "Full audit log" })).toBeVisible();
   });
 });

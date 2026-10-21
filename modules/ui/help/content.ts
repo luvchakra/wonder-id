@@ -153,17 +153,17 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "identities",
     title: "The identity directory",
     category: "Identities",
-    updated: "2026-10-18",
+    updated: "2026-10-21",
     summary:
       "Identities lists every governed identity — people, external identities, machine identities and AI agents — with its type, status, owner and source.",
     body: [
       "Administration › Identities › Identity Overview counts identities by type and lists what needs attention: open lifecycle work, non-human identities without an owner, external access ending within 30 days, and external identities still active past their end date. All Identities, Workforce, External Identities and Non-Human Identities each list one slice.",
       "New identity adds a person, an external person or a non-human identity (service account, application account, workload or API client). An external identity needs a sponsor, an organization and a future end date; a non-human identity needs an accountable owner. Orphaned Identities lists the non-human identities nobody owns; access can't be requested for them until they have an owner. To add an AI agent, register it under Self Service › Register Agent; its identity appears here by itself.",
-      "Open an identity to see its details, source, owner or sponsor and manager, its relationships to other identities, and its attributes; people also have a Lifecycle tab. A value owned by an identity source is not silently overwritten here. Changes are recorded in the audit trail.",
+      "Open an identity to see its details, source, owner or sponsor and manager, its relationships to other identities, and its attributes; people also have a Lifecycle tab. A value owned by an identity source is not silently overwritten here. The Audit history tab (for those who can read the audit log) lists the latest 100 changes to the identity, its WonderID sign-in, its accounts and the access requests for it: what happened, who did it and when. For a change to a person's details it names the fields that changed, not their values, which stay out of the permanent audit trail.",
       "Two records of the same person can be merged. When another record has the same email or name, the person's page says \"Possible duplicate\"; Compare and merge shows both side by side. Where they differ, choose which value stays; a blank takes the other value. Merge records moves the other record's accounts and access, its access packages, pending requests, open findings, direct reports, source records and WonderID sign-in to this record, and sets the other inactive. History stays with the record it happened to. Undo the merge, on either record, puts everything back and needs a reason. Two records that both sign in, hold the same package, or come from the same identity source can't be merged. You can't merge your own record; another administrator must do it. Two records that share no email and no name need a reason.",
       "AI Agents › Agent Identities is a separate inventory of the technical identities your connected sources report: service accounts, workload identities, OAuth clients, API keys and MCP server identities. Most are not AI agents, so each unlinked one shows how likely it is to be one. Administration › Organization Settings › Identity Attributes defines the extra attributes your organization tracks.",
     ],
-    keywords: ["identity", "identities", "people", "person", "employee", "contractor", "external", "sponsor", "end date", "machine", "service account", "directory", "nhi", "non-human", "new identity", "orphaned", "relationships", "merge", "duplicate", "undo merge"],
+    keywords: ["identity", "identities", "people", "person", "employee", "contractor", "external", "sponsor", "end date", "machine", "service account", "directory", "nhi", "non-human", "new identity", "orphaned", "relationships", "merge", "duplicate", "undo merge", "audit history", "history", "who changed"],
     href: "/identities",
   },
   {

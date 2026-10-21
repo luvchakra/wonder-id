@@ -19,11 +19,12 @@ import {
   listActiveMergesFor,
 } from "@/modules/agent-identity/service";
 import { ApiError } from "@/lib/shared/types/foundation";
-import { getIdentityAccessLedger, LEDGER_SOURCE_LABEL, LEDGER_STATUS_LABEL, type IdentityAccessEntry, type LedgerStatus } from "@/modules/access-governance/service";
+import { getIdentityAccessLedger, identityRelatedObjectIds, LEDGER_SOURCE_LABEL, LEDGER_STATUS_LABEL, type IdentityAccessEntry, type LedgerStatus } from "@/modules/access-governance/service";
 import { RecordProvenance, Badge, Card, EmptyState, LinkButton, SeverityBadge, TabPanel, Tabs } from "@/modules/ui";
 import { groupsOfUser } from "@/lib/users/groups";
 import { listIdentityFindings } from "@/modules/risk/service";
-import { listObjectActivity } from "@/modules/operations/service";
+import { listObjectHistory } from "@/modules/operations/service";
+import { describeAuditEvent } from "../history";
 import { AddRelationshipForm, EditIdentityForm, EndRelationshipButton, LifecycleTaskActions, LifecycleTransitionForm, UndoMergeForm, UnlinkSourceRecordButton } from "../IdentityForms";
 import { listSourceLinksForIdentity } from "@/modules/integrations/service";
 import { findMemberForPerson, getUserDetail } from "@/lib/users/users";
@@ -160,7 +161,12 @@ export default async function IdentityDetailPage({ params, searchParams }: { par
     // IDENTITY-P0-17: the WonderID groups of the identity's user, its findings, and what happened to it.
     identity.userId ? groupsOfUser(tenantId, identity.userId) : Promise.resolve(null),
     canReadRisk ? listIdentityFindings(tenantId, { identityId: id, agentId: identity.agentId ?? null }) : Promise.resolve(null),
-    canReadAudit ? listObjectActivity(tenantId, [id, identity.userId ?? "", identity.agentId ?? ""], 50) : Promise.resolve(null),
+    // Owner feedback (21 Oct): the audit history covers the identity, its user and agent, its accounts and the requests for it.
+    canReadAudit
+      ? (canReadAccess ? identityRelatedObjectIds(tenantId, id) : Promise.resolve({ accountIds: [], requestIds: [] })).then((related) =>
+          listObjectHistory(tenantId, [id, identity.userId ?? "", identity.agentId ?? "", ...related.accountIds, ...related.requestIds], 100),
+        )
+      : Promise.resolve(null),
     canSeeIdRoles ? loadIdRoles(tenantId, { userId: identity.userId, email: identity.email }, canAssignIdRoles).catch(() => ({ ok: false as const })) : Promise.resolve(null),
     // IDENTITY-P0-23: merges in effect, and other records that look like the same person.
     personIdentity ? listActiveMergesFor(tenantId, id) : Promise.resolve([]),
@@ -204,7 +210,7 @@ export default async function IdentityDetailPage({ params, searchParams }: { par
     ...(ledger ? [{ value: "access", label: "Access", count: ledger.entries.length }] : []),
     ...(groups ? [{ value: "groups", label: "Groups", count: groups.length }] : []),
     ...(findings ? [{ value: "risk", label: "Risk", count: findings.filter((f) => !["resolved", "false_positive"].includes(f.status)).length }] : []),
-    ...(activity ? [{ value: "activity", label: "Activity" }] : []),
+    ...(activity ? [{ value: "activity", label: "Audit history" }] : []),
     { value: "relationships", label: "Relationships", count: current.length },
     { value: "attributes", label: "Attributes", count: storedKeys.length },
     ...(canManage ? [{ value: "edit", label: "Edit" }] : []),
@@ -550,25 +556,31 @@ export default async function IdentityDetailPage({ params, searchParams }: { par
           {activity ? (
             <TabPanel value="activity" className="pt-4">
               {activity.length === 0 ? (
-                <EmptyState title="No activity recorded" description="Changes to this identity, its user account and its AI agent appear here." />
+                <EmptyState title="No changes recorded" description="Changes to this identity, its sign-in, its accounts and its access requests appear here." />
               ) : (
                 <ol className="divide-y divide-border rounded-lg border border-border">
-                  {activity.map((a) => (
-                    <li key={a.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2 text-sm">
-                      <span className="min-w-0">
-                        <span className="font-mono text-xs text-foreground">{a.action}</span>
-                        <span className="text-xs text-muted-foreground"> · {a.actorType === "user" ? "by a person" : `by the ${a.actorType}`}</span>
-                      </span>
-                      <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {a.outcome === "failure" ? <Badge tone="danger">Failed</Badge> : null}
-                        {a.createdAt.slice(0, 16).replace("T", " ")}
-                      </span>
-                    </li>
-                  ))}
+                  {activity.map((a) => {
+                    const { title, detail } = describeAuditEvent(a);
+                    return (
+                      <li key={a.id} className="flex flex-wrap items-start justify-between gap-3 px-3 py-2 text-sm">
+                        <span className="min-w-0">
+                          <span className="font-medium text-foreground">{title}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {a.actorName ? `By ${a.actorName}` : a.actorType === "integration" ? "By a connection" : "By WonderID"}
+                            {detail ? ` · ${detail}` : ""}
+                          </span>
+                        </span>
+                        <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {a.outcome === "failure" ? <Badge tone="danger">Failed</Badge> : null}
+                          <time dateTime={a.createdAt}>{a.createdAt.slice(0, 16).replace("T", " ")} UTC</time>
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ol>
               )}
               <p className="mt-2 text-xs text-muted-foreground">
-                The latest 50.{" "}
+                The latest 100.{" "}
                 <Link href="/audit" className="text-primary hover:underline">
                   Full audit log
                 </Link>

@@ -159,6 +159,21 @@ export type AccountSummary = { total: number; correlated: number; orphan: number
  * The counts behind the inventory's cards, in one query (migration 0207).
  * Its filters are the views of applyView(); keep the two in step.
  */
+/**
+ * Owner feedback (21 Oct): an identity's audit history also covers its
+ * accounts and the access requests raised for it. The ids of those, as the
+ * user under RLS and filtered on the tenant, newest requests first.
+ */
+export async function identityRelatedObjectIds(tenantId: string, identityId: string): Promise<{ accountIds: string[]; requestIds: string[] }> {
+  const supabase = await supabaseServer();
+  const [accounts, requests] = await Promise.all([
+    supabase.from("accounts").select("id").eq("tenant_id", tenantId).eq("identity_id", identityId).limit(100),
+    supabase.from("access_requests").select("id").eq("tenant_id", tenantId).eq("subject_identity_id", identityId).order("created_at", { ascending: false }).limit(100),
+  ]);
+  if (accounts.error || requests.error) throw new ApiError(500, "QUERY_FAILED", (accounts.error ?? requests.error)!.message);
+  return { accountIds: (accounts.data ?? []).map((r) => r.id as string), requestIds: (requests.data ?? []).map((r) => r.id as string) };
+}
+
 export async function getAccountSummary(tenantId: string, opts: { applicationId?: string; dormantDays?: number } = {}): Promise<AccountSummary> {
   const [supabase, days] = await Promise.all([supabaseServer(), opts.dormantDays ?? getTenantConfig(tenantId).then((c) => c["access.dormantDays"])]);
   const { data, error } = await supabase.rpc("account_summary_counts", {

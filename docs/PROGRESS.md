@@ -8,7 +8,7 @@ by hand.** Update the owning module's backlog table, then regenerate:
 npm run progress
 ```
 
-Generated 2026-10-20 from 11 module backlogs.
+Generated 2026-10-21 from 11 module backlogs.
 
 ---
 
