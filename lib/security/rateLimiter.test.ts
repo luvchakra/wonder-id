@@ -35,7 +35,7 @@ vi.mock("@/lib/db/supabaseServer", () => ({
   supabaseServiceRole: () => ({ from: () => ratelimitTable() }),
 }));
 
-const { checkAndRecordAttempt, isDistinguishingClientIp } = await import("./rateLimiter");
+const { checkAndRecordAttempt, isDistinguishingClientIp, limitMember, MEMBER_LIMITS } = await import("./rateLimiter");
 
 describe("checkAndRecordAttempt — FOUNDATION-P0-05.3", () => {
   beforeEach(() => {
@@ -100,5 +100,31 @@ describe("isDistinguishingClientIp — regression for the shared-bucket lockout"
   it("accepts a real, distinguishing public IP", () => {
     expect(isDistinguishingClientIp("203.0.113.4")).toBe(true);
     expect(isDistinguishingClientIp("2001:db8::1")).toBe(true);
+  });
+});
+
+describe("limitMember — per-member limits on bulk endpoints", () => {
+  beforeEach(() => {
+    insertCalls.length = 0;
+    mockCount = 0;
+  });
+
+  it("lets a member through under the limit and records the call against their user id", async () => {
+    mockCount = 5;
+    expect(await limitMember("member:export", "user-1")).toBeNull();
+    expect(insertCalls).toEqual([{ bucket: "member:export", subject: "user-1" }]);
+  });
+
+  it("returns 429 with Retry-After once the member reaches the limit", async () => {
+    mockCount = MEMBER_LIMITS["member:help-ask"].maxAttempts;
+    const res = await limitMember("member:help-ask", "user-1");
+    expect(res?.status).toBe(429);
+    expect(res?.headers.get("Retry-After")).toBe(String(MEMBER_LIMITS["member:help-ask"].windowSeconds));
+    expect((await res!.json()).error.code).toBe("RATE_LIMITED");
+  });
+
+  it("does nothing without a signed-in user", async () => {
+    expect(await limitMember("member:ai-summarize", "")).toBeNull();
+    expect(insertCalls).toEqual([]);
   });
 });

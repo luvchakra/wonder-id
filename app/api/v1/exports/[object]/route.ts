@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/shared/types/foundation";
 import { errorResponse } from "@/modules/operations/http";
 import { EXPORT_PERMISSION, getExportEntry } from "@/modules/operations/exportRegistry";
 import { exportResponse, templateResponse } from "@/modules/operations/exports";
+import { limitMember } from "@/lib/security/rateLimiter";
 
 /**
  * GET /api/v1/exports/:object — the object page's "Export CSV" (2026-10-10).
@@ -23,6 +24,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ obje
     }
     await requirePermission(EXPORT_PERMISSION);
     const ctx = await requirePermission(entry.permission);
+    const limited = await limitMember("member:export", ctx.userId);
+    if (limited) return limited;
     return await exportResponse(ctx, entry, url.searchParams);
   } catch (err) {
     return errorResponse(err);

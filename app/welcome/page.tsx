@@ -52,6 +52,9 @@ import { Pricing, type PublicPrice } from "./Pricing";
 
 export const metadata: Metadata = {
   title: { absolute: "WonderID · Identity governance for human and non-human identities" },
+  // The one page search engines may index (app/robots.ts); the root layout
+  // marks every other page noindex.
+  robots: { index: true, follow: true },
   description:
     "WonderID is identity governance and administration (IGA) for human and non-human identities: employees, contractors, partners, service accounts, workloads, API keys and AI agents. One control plane for lifecycle, access requests, certification, risk and runtime assurance, with security, privacy (GDPR, DPDP) and financial compliance (SOX) built in.",
 };

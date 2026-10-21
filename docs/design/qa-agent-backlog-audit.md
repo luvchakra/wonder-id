@@ -2646,3 +2646,15 @@ previous session):** dashboard Supabase calls 44 → 24; common pages'
 Supabase span about 260–370 ms; `my_access_context` typically 40–150 ms;
 `scripts/perf-pages.mjs` median 1,009 ms, within noise of 969 ms after
 round 2.
+
+## 2026-10-21 — Client bundles carry no server-only logic
+
+`tests/architecture/client-bundle.test.ts` walks every `"use client"` file's
+value imports through `app/`, `modules/` and `lib/` (type imports and
+`"use server"` files are boundaries) and fails if one reaches
+`modules/risk/`, `modules/runtime-assurance/`, `lib/rbac/` or `lib/ai/`.
+The scoring, SHOULD/CAN/DID, authorization and prompt code is the product's
+value and must never be readable in a browser bundle (owner request,
+AI reverse-engineering hardening; Foundation audit log, same date). No
+violations today; checked that it fails when a client form imports
+`modules/risk/signals.ts`.

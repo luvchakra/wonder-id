@@ -23,7 +23,7 @@
 
 [Revision history](#revision-history) is at the end, newest first.
 
-**Last updated:** 20 October 2026
+**Last updated:** 21 October 2026
 
 A plain-language guide to what WonderID does, how its parts fit together and where to find each feature. It is kept current as the product changes.
 
@@ -97,6 +97,7 @@ The everyday cycle looks like this:
 - **Notifications:** in the app, and by email if you choose.
 - **On phones and tablets:** WonderID can be installed like an app, and every screen works at phone size. Install it once from the main address (account menu › Install the app, or id.wonderapps.biz/install): the one app opens every organization and environment you belong to, and switching between them stays in the app. This works in Chrome and Edge on a computer. On phones (Android and iPhone) and in Firefox a switch opens the other address in the browser's overlay, with its own sign-in (owner decision, 14 Oct: keep it that way). An organization's own address no longer installs a separate app. Each address keeps its own sign-in, so the first visit to an organization in the app asks you to sign in there.
 - **Light and dark mode:** both are supported.
+- **Usage limits:** to protect the product from automated copying, each person can ask the help assistant 60 questions, request 60 AI summaries and download 30 CSV exports an hour. Past a limit you see "Too many requests. Try again later." Search engines index only the public home page, and AI crawlers are asked to stay away from the whole site.
 - **Help centre:** for signed-in people only (since 16 Oct 2026). It has a user guide, an FAQ and an assistant (WonderID AI in the account menu) that answers questions from the guide. Signed out, you go to sign-in and come back to the help page you asked for; the sign-in screens offer "Need help? Email us" instead. Each guide section shows when it was last updated.
 
 ---
@@ -704,6 +705,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 21 Oct 2026 | Usage limits against automated copying: per person, 60 help-assistant questions, 60 AI summaries and 30 CSV exports an hour. Only the public home page may be indexed by search engines, and AI crawlers are asked to stay away. |
 | 20 Oct 2026 | New built-in connection type, Generic REST API: connect any REST/JSON API by describing its sign-in, requests, paging, field mappings and changes in the connection's own settings, with no connection type to write. |
 | 20 Oct 2026 | Active Directory is a built-in connection type: people with their managers, accounts (disabled, privileged, expiring, last sign-in), managed service accounts, security and distribution groups and memberships; it can add and remove group members once changes are turned on. |
 | 20 Oct 2026 | New connection type: Windows server (PowerShell) reads a server's local accounts, local groups and their members over WinRM, and can disable an account and add or remove group members once changes are turned on. Integrators can write their own PowerShell connection types, with scripts that take any parameters. |

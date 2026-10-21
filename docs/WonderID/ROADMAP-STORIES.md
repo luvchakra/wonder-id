@@ -12,8 +12,8 @@ Every story counts equally here, so the many finished product-base stories weigh
 
 ## Completed recently
 
-- ✅ **COMPLIANCE-P0-14** Campaign templates, preview, closed-loop revocation and consultation · this change
-- ✅ **COMPLIANCE-P0-15** Certification campaign types: user manager, entitlement owner, application owner, role-based, event-based, micro-certification · this change
+- ✅ **COMPLIANCE-P0-14** Campaign templates, preview, closed-loop revocation and consultation · [#267](https://github.com/luvchakra/wonder-agent/pull/267)
+- ✅ **COMPLIANCE-P0-15** Certification campaign types: user manager, entitlement owner, application owner, role-based, event-based, micro-certification · [#267](https://github.com/luvchakra/wonder-agent/pull/267)
 - ✅ **INTEGRATION-P0-33** Database connectors: SQL Server, Oracle and MySQL/MariaDB on the sql driver, a catalog connection type for each, and Database (your own queries) for any of them (fix list item 19) · [#266](https://github.com/luvchakra/wonder-agent/pull/266)
 - ✅ **INTEGRATION-P0-32** Generic REST API connection type (fix-list item 19, owner request 2026-10-20): any REST/JSON API configured in the connection's settings, all sign-in styles, paging, mappings and changes · [#264](https://github.com/luvchakra/wonder-agent/pull/264)
 - ✅ **ACCESS-P0-21** Business and IT roles · [#246](https://github.com/luvchakra/wonder-agent/pull/246)

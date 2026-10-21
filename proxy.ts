@@ -361,5 +361,5 @@ export async function proxy(request: NextRequest) {
 // session check it would be a redirect to /sign-in and the app could never
 // be installed. None of it is tenant data.
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|brand/|\.well-known/).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|manifest.webmanifest|robots.txt|brand/|\.well-known/).*)"],
 };

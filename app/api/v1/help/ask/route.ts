@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTenantContext } from "@/lib/tenant/getTenantContext";
 import { getSessionUser } from "@/lib/tenant/session";
 import { answerHelpQuestion, guideOnlyAnswer } from "@/lib/ai/helpAnswer";
+import { limitMember } from "@/lib/security/rateLimiter";
 
 /**
  * The help assistant's endpoint. Needs a session (owner request,
@@ -21,13 +22,15 @@ import { answerHelpQuestion, guideOnlyAnswer } from "@/lib/ai/helpAnswer";
 const MAX_QUESTION_CHARS = 500;
 
 export async function POST(request: Request) {
-  if (!(await getSessionUser())) {
+  const user = await getSessionUser();
+  if (!user) {
     return NextResponse.json(
       { ok: false, error: { code: "UNAUTHENTICATED", message: "Sign in to use the help assistant" } },
       { status: 401, headers: { "Cache-Control": "no-store" } },
     );
   }
-  const ctx = await getTenantContext();
+  const [limited, ctx] = await Promise.all([limitMember("member:help-ask", user.id), getTenantContext()]);
+  if (limited) return limited;
 
   let body: unknown;
   try {
