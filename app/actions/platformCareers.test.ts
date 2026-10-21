@@ -14,7 +14,7 @@ vi.mock("@/modules/platform-admin/service", () => ({
 }));
 vi.mock("@/modules/careers/wonderjobs", () => ({ checkCareersKey: (...a: unknown[]) => checkCareersKey(...a) }));
 
-import { removeCareersConnectionAction, saveCareersConnectionAction } from "./platformCareers";
+import { refreshCareersAction, removeCareersConnectionAction, saveCareersConnectionAction } from "./platformCareers";
 
 const form = (fields: Record<string, string>) => {
   const f = new FormData();
@@ -35,6 +35,8 @@ describe("the careers connection in the vendor console", () => {
     await expect(saveCareersConnectionAction(idle, form({ key: KEY }))).rejects.toThrow("FORBIDDEN");
     requirePlatformAdmin.mockRejectedValueOnce(new Error("FORBIDDEN"));
     await expect(removeCareersConnectionAction()).rejects.toThrow("FORBIDDEN");
+    requirePlatformAdmin.mockRejectedValueOnce(new Error("FORBIDDEN"));
+    await expect(refreshCareersAction()).rejects.toThrow("FORBIDDEN");
     expect(saveCareersConnection).not.toHaveBeenCalled();
     expect(removeCareersConnection).not.toHaveBeenCalled();
   });
