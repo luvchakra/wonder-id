@@ -79,6 +79,16 @@ describe("the help guide needs a session (owner request, 2026-10-16)", () => {
   });
 });
 
+describe("the careers page is public (owner request, 2026-10-21)", () => {
+  it("signed out, the careers list, a job and the status page pass through without a session", async () => {
+    for (const path of ["/careers", "/careers/ejob_123", "/careers/status?t=wjst_x"]) {
+      const res = await proxy(new NextRequest(`http://localhost${path}`));
+      expect(res.status).toBe(200);
+      expect(res.headers.get("location")).toBeNull();
+    }
+  });
+});
+
 describe("proxy on tenant addresses (FOUNDATION-P0-22)", () => {
   const at = (host: string, path: string) => new NextRequest(`http://${host}${path}`, { headers: { host } });
   beforeEach(() => {

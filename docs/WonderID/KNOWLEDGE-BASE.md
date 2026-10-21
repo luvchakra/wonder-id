@@ -664,6 +664,7 @@ These pages are for the WonderID service operator only, never for customers:
 - **Platform branding and health.**
 - **Billing and refunds.**
 - **Platform audit trail.**
+- **Careers:** WonderID's open positions, shown on the home page and at `/careers`. They are posted in WonderJobs' Hiring section, where the operator ticks "On WonderID careers" for each job. Anyone can open a position and apply (name, email, phone, location, résumé link, LinkedIn and a note). WonderJobs stores the application, emails the applicant a confirmation with a link to see their status or withdraw, emails the hiring team, reminds them after two days without a decision, and emails the applicant at every step (review, interview, offer, hired, not moving forward). The Careers page in the vendor console shows whether the link works and what is live.
 
 ---
 
@@ -705,6 +706,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 21 Oct 2026 | Careers: open positions on the home page and at `/careers`, with an application form. Jobs, applications and every email are run by WonderJobs; the vendor console has a Careers page. |
 | 21 Oct 2026 | Usage limits against automated copying: per person, 60 help-assistant questions, 60 AI summaries and 30 CSV exports an hour. Only the public home page may be indexed by search engines, and AI crawlers are asked to stay away. |
 | 20 Oct 2026 | New built-in connection type, Generic REST API: connect any REST/JSON API by describing its sign-in, requests, paging, field mappings and changes in the connection's own settings, with no connection type to write. |
 | 20 Oct 2026 | Active Directory is a built-in connection type: people with their managers, accounts (disabled, privileged, expiring, last sign-in), managed service accounts, security and distribution groups and memberships; it can add and remove group members once changes are turned on. |

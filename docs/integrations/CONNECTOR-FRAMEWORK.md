@@ -31,6 +31,14 @@ behind the same address guard as the LDAP and SQL drivers. Operations'
 e-mail channel calls it through the module's published service; no
 allowlist was widened.
 
+WonderID's own careers page is not an organization's data. On 2026-10-21
+the owner asked for it to be run by WonderJobs: jobs posted in WonderJobs
+show on `/careers`, and applications go to WonderJobs. One file,
+`modules/careers/wonderjobs.ts`, was added to the outbound allowlist for it,
+like the email and AI providers: server only, a fixed https
+`*.wonderapps.biz` host, the career-site key from `WONDERJOBS_CAREERS_KEY`,
+a timeout and one retry on reads.
+
 ## The Connector Gateway
 
 User requirement (2026-10-10): "all such connections should pass through one

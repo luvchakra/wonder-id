@@ -4481,3 +4481,46 @@ including Request Policies". On `/access/applications/[id]`:
 
 Verified: eslint on the page, typecheck clean apart from the known
 `app/welcome` image errors, `npx vitest run modules/ui/help`.
+
+## 2026-10-21 — Careers page, run by WonderJobs (owner request)
+
+Owner request: a Careers section on the landing page with open positions
+(partner, sales, marketing, developer), jobs posted by a WonderID platform
+administrator in WonderJobs' hiring section and linked to WonderID, a
+standard Apply form on WonderID's page, with WonderJobs running the backend
+(storage, emails to the applicant and the hiring team, reminders, decision
+emails). Reusable for other apps' career pages.
+
+- `modules/careers/wonderjobs.ts` (server only): the WonderJobs careers
+  client. Lists the jobs linked to WonderID's career site, gets one,
+  submits an application, reads or withdraws an applicant's status by the
+  token in their email. Key `WONDERJOBS_CAREERS_KEY` (server only, #10);
+  host fixed to https `*.wonderapps.biz` (`careersBase`); 8 s timeout; one
+  retry on reads, none on writes. States: ok, needs setup, unavailable, not
+  found, rejected (WonderJobs' own message) — nothing is invented (§19.2).
+- Pages: `/careers`, `/careers/[id]` (description, skills, Apply form),
+  `/careers/status?t=…` (status, withdraw; noindex, no-referrer). The landing
+  page gets a Careers section (first four positions, parallel with the
+  price read) and a footer link; the header gets Careers (xl and up).
+  The marketing chrome moved to `app/welcome/MarketingChrome.tsx` so the
+  careers pages share it. Positions are re-read at most every five minutes.
+- `app/careers/actions.ts`: server actions; per-address rate limits
+  (`checkAndRecordAttempt`, 10 applications and 30 status changes an hour),
+  a honeypot field; "submitted" only once WonderJobs stored it (§17.5).
+- `proxy.ts` / `lib/tenant/host.ts`: `/careers` is public and on the main
+  address. `proxy.test.ts` covers it.
+- Non-negotiable #20: this is WonderID's own vendor provider, not an
+  organization's data; `modules/careers/wonderjobs.ts` was added to the
+  outbound allowlist of `tests/architecture/connector-boundary.test.ts` on
+  the owner's request, and recorded in `CONNECTOR-FRAMEWORK.md`.
+- The four positions are WonderJobs data: the owner runs the seed SQL given
+  with this change in WonderJobs after creating the workspace and career
+  site. No job is hard-coded in WonderID.
+
+Verified: `npx vitest run modules/careers tests/architecture lib/tenant
+proxy.test.ts modules/ui/help` (all passed: 76 + 33), eslint on the changed
+files, typecheck clean apart from the known `app/welcome` image errors. Ran
+`next dev` against a mock WonderJobs and checked `/careers`, a job page, the
+status page and the landing section at 1280 px light and 390 px dark (no
+horizontal scroll at 390, 1024 and 1280), and submitted the Apply form end to
+end. New nightly spec `tests/e2e/careers.spec.ts`.

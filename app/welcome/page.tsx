@@ -49,6 +49,8 @@ import usersDesktopLight from "@/assets/product/users-desktop-light.png";
 import { PLAN_DEFAULTS } from "@/modules/platform-admin/service";
 import { listPublicPrices } from "@/modules/billing/service";
 import { Pricing, type PublicPrice } from "./Pricing";
+import { listCareerJobs } from "@/modules/careers/wonderjobs";
+import { JobList } from "@/app/careers/JobList";
 
 export const metadata: Metadata = {
   title: { absolute: "WonderID · Identity governance for human and non-human identities" },
@@ -461,7 +463,7 @@ async function loadPrices(): Promise<PublicPrice[] | null> {
 }
 
 export default async function WelcomePage() {
-  const prices = await loadPrices();
+  const [prices, jobs] = await Promise.all([loadPrices(), listCareerJobs()]);
   return (
     <>
       {/* ---------------------------------------------------------- hero */}
@@ -1020,6 +1022,33 @@ export default async function WelcomePage() {
         </div>
       </section>
 
+      {/* --------------------------------------------------------- careers */}
+      {/* Positions are posted in WonderJobs (modules/careers) and re-read at most every five minutes. */}
+      <section id="careers" className="scroll-mt-16 border-b border-border bg-card/40">
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-2xl">
+              <SectionLabel>Careers</SectionLabel>
+              <h2 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-foreground sm:text-3xl">
+                Build identity security with us.
+              </h2>
+              <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+                We&rsquo;re hiring across partnerships, sales, marketing and engineering to bring WonderID to
+                security and identity teams.
+              </p>
+            </div>
+            {jobs.state === "ok" && jobs.data.length > 4 && (
+              <Link href="/careers" className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary hover:underline">
+                All {jobs.data.length} positions <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            )}
+          </div>
+          <div className="mt-10">
+            <JobList result={jobs} limit={4} />
+          </div>
+        </div>
+      </section>
+
       {/* ----------------------------------------------------- closing CTA */}
       <section className="relative overflow-hidden">
         <GridBackdrop />
@@ -1061,6 +1090,9 @@ export default async function WelcomePage() {
             </Link>
             <Link href="/sign-up" className="text-muted-foreground hover:text-foreground">
               Get started
+            </Link>
+            <Link href="/careers" className="text-muted-foreground hover:text-foreground">
+              Careers
             </Link>
             {/* The address itself is deliberately never printed on the page —
                 the mailto: link is the only place it lives, so it can't be

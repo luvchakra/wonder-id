@@ -53,14 +53,18 @@ async function sessionLimitsFor(supabase: ReturnType<typeof createServerClient>,
  * /help needs a session (owner request, 2026-10-16; it was public from
  * 2026-09-18). A signed-out visitor goes to sign-in and comes back to the
  * help page asked for (`next`, accepted only for /help by the sign-in form).
+ *
+ * /careers is WonderID's public careers page (owner request, 2026-10-21):
+ * open positions, the application form and an applicant's status page.
  */
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth/", "/welcome", "/forgot-password", "/update-password", "/install", "/service-unavailable", "/tenant-not-found"];
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth/", "/welcome", "/careers", "/forgot-password", "/update-password", "/install", "/service-unavailable", "/tenant-not-found"];
 /** Paths the idle/absolute session-expiry clock does not run on. */
 const UNENFORCED_PATHS = [
   "/sign-in",
   "/sign-up",
   "/auth/callback",
   "/welcome",
+  "/careers",
   "/forgot-password",
   "/update-password",
 ];

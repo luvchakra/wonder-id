@@ -89,6 +89,7 @@ export function orgAddressRequired(env: Record<string, string | undefined> = pro
  */
 export const MAIN_ADDRESS_PATHS = [
   "/welcome",
+  "/careers",
   "/sign-in",
   "/sign-up",
   "/auth/",
