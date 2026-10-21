@@ -25,7 +25,7 @@ request as each fix.
 **Status:** Not started, In progress, Partly fixed, Fixed (closure criteria
 met, with evidence), or Waiting on the owner.
 
-**Last updated:** 18 October 2026, 06:45 IST (WID-H06 group path closed; WID-H10 email-confirmation dependency removed; WID-H11 self-merge refused and a reason required, four-eyes gap accepted by the owner)
+**Last updated:** 21 October 2026 (owner decision on WID-C01: a Tenant Administrator may approve their own request-policy change with a reason)
 
 ## Summary
 
@@ -61,6 +61,7 @@ was chosen in the sheet "WonderID: decisions pending with the owner".
 | 13 Oct 2026 | WID-H09 | Access-combination SoD: correct the docs or build it? | **Docs now, build later.** | Done: the knowledge base describes the process SoD that exists and says access-combination SoD is not provided yet. Building it is a backlog story (ACCESS-P1). |
 | 13 Oct 2026 | Non-negotiable #15 (IDENTITY-P0-18) | How does a joiner or mover get birthright access? | **Pre-approved: assigned automatically.** Marking a package birthright takes two administrators (four-eyes), and that is the approval. | Done: migration 0151 (applied), `setPackageBirthright` / `assignBirthrightPackages`; a change to contents or eligibility needs approval again. |
 | 14 Oct 2026 | WID-H10 | Keep `PLATFORM_ADMIN_EMAILS`, or retire it for the audited `platform_admins` table? | **Use the table; the variable only bootstraps it** (clarified the same afternoon). | Done: the whole console needs a `platform_admins` entry; a listed address (email, Google or LinkedIn sign-in, never SSO or Microsoft-only) opens only Platform Admins and can add an entry there, audited. |
+| 21 Oct 2026 | WID-C01 | May a Tenant Administrator approve their own request-policy change? | **Yes, with a reason** (owner test feedback, as for onboarding on 14 Oct). | Done (migration 0211): the proposer, if a Tenant Administrator, may approve (never reject) their own change with a required note; it is stored as `self_approved` and audited as such; the database allows decider = proposer only then. Everyone else still needs a second person. |
 | 14 Oct 2026 | WID-C01 | Second-administrator approval for request policy changes? | **Yes, in organizations with two or more administrators.** | Done (#190, ACCESS-P0-35 part 1): such a change waits for someone else; every applied change is versioned. |
 | 12 Oct 2026 | WID-C01 | Should a second administrator approve changes that loosen a request policy? | **No; leave as it is.** One administrator may loosen a policy; the change is audited. | No maker/checker build. The risk is accepted; it is revisited under "Decisions to come". |
 | 12 Oct 2026 | WID-C02 | May a connection carry out a leaver's removals? | **The connector disables the leaver's account at once; removing each access stays a person's task.** | Done: when a person is disabled or terminated, each account on a connection that supports disabling, with changes turned on, is disabled by the connector. This is an approved automation path under non-negotiable #15. Failures become a person's task. The per-access removal tasks stay as today. |

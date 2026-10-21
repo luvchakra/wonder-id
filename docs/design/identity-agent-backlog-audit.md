@@ -2389,3 +2389,7 @@ history says which fields changed.
 pre-existing image-module errors of a checkout without `next-env.d.ts`);
 eslint on the changed files; `identities.spec.ts` updated to the tab's new
 name, run in tonight's nightly (owner instruction: E2E only at night).
+
+## 2026-10-21 — Audit history is the identity page's last tab (owner feedback)
+
+Moved after Edit. No other change.

@@ -9,6 +9,8 @@ import { objectActionsFor } from "@/modules/operations/exportRegistry";
 import { PolicyForm } from "./PolicyForm";
 import { ChangeDecision } from "./ChangeDecision";
 import { ScopePicker } from "./ScopePicker";
+import { changeLabel, changeValue } from "./changeLabels";
+import { TENANT_ADMIN_ROLE } from "@/lib/rbac/delegatedRoleRules";
 
 // ACCESS-P0-18 — request policies (spec §11.4): who may request what, for
 // whom, for how long, with what justification, and when a person must
@@ -40,7 +42,7 @@ export default async function RequestPoliciesPage({ searchParams }: { searchPara
   const who = (userId: string) => (userId === ctx.userId ? "you" : (members.find((m) => m.userId === userId)?.displayName ?? members.find((m) => m.userId === userId)?.email ?? "a former member"));
   const scopeName = (key: { applicationId: string | null; entitlementId: string | null }) =>
     policies.find((p) => p.applicationId === key.applicationId && p.entitlementId === key.entitlementId)?.name ?? (key.applicationId ? "A new application policy" : "The organization default");
-  const show = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : String(v));
+  const isAdmin = ctx.roles.includes(TENANT_ADMIN_ROLE);
   const selectedApp = apps.find((a) => a.id === sp.app) ?? null;
   const entitlements = selectedApp ? await listEntitlementsForApplication(tenantId, selectedApp.id) : [];
   const existing = policies.find((p) => (selectedApp ? p.applicationId === selectedApp.id && !p.entitlementId : !p.applicationId));
@@ -77,28 +79,51 @@ export default async function RequestPoliciesPage({ searchParams }: { searchPara
 
       {waiting.length ? (
         <Card>
-          <CardHeader title="Waiting for approval" description="Changes apply once someone other than the proposer approves them." />
+          <CardHeader
+            title="Waiting for approval"
+            description={isAdmin ? "Changes apply once someone other than the proposer approves them; as an administrator you may approve your own, with a note." : "Changes apply once someone other than the proposer approves them."}
+          />
           <CardBody>
-            <ul className="divide-y divide-border text-sm">
-              {waiting.map((c) => (
-                <li key={c.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
-                  <span className="min-w-0">
-                    <span className="font-medium text-foreground">{scopeName(c.objectKey)}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      Proposed by {who(c.requestedBy)} · {new Date(c.requestedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                    <span className="mt-1 block space-y-0.5 text-xs">
-                      {c.changes.map((f) => (
-                        <span key={f.field} className="block">
-                          <code>{f.field}</code>: {show(f.before)} → <span className="text-foreground">{show(f.after)}</span>
+            {/* Owner feedback (21 Oct): one row per change, in the form's words. */}
+            <TableContainer label="Policy changes waiting for approval" bare>
+              <Thead>
+                <tr>
+                  <Th>Policy</Th>
+                  <Th>Changes</Th>
+                  <Th>Decision</Th>
+                </tr>
+              </Thead>
+              <tbody>
+                {waiting.map((c) => {
+                  const isNew = c.changes.every((f) => f.before === null || f.before === undefined);
+                  const value = (field: string, v: unknown) => changeValue(field, v, (wid) => workflowName.get(wid));
+                  const own = c.requestedBy === ctx.userId;
+                  return (
+                    <Tr key={c.id}>
+                      <Td>
+                        <span className="font-medium text-foreground">{scopeName(c.objectKey)}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {isNew ? "New policy" : "Change"} · by {who(c.requestedBy)} · {new Date(c.requestedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                         </span>
-                      ))}
-                    </span>
-                  </span>
-                  {c.requestedBy === ctx.userId ? <Badge tone="neutral">Waiting for another administrator</Badge> : <ChangeDecision id={c.id} />}
-                </li>
-              ))}
-            </ul>
+                      </Td>
+                      <Td>
+                        <span className="block max-w-2xl text-xs leading-5 text-muted-foreground">
+                          {c.changes.map((f, i) => (
+                            <span key={f.field}>
+                              {i ? " · " : ""}
+                              {changeLabel(f.field)}:{" "}
+                              {isNew ? null : <>{value(f.field, f.before)} → </>}
+                              <span className="text-foreground">{value(f.field, f.after)}</span>
+                            </span>
+                          ))}
+                        </span>
+                      </Td>
+                      <Td>{own && !isAdmin ? <Badge tone="neutral">Waiting for another administrator</Badge> : <ChangeDecision id={c.id} own={own} />}</Td>
+                    </Tr>
+                  );
+                })}
+              </tbody>
+            </TableContainer>
           </CardBody>
         </Card>
       ) : null}

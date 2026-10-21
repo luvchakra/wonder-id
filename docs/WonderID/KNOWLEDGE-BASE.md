@@ -337,7 +337,7 @@ An AI assistant can **propose** an onboarding configuration; a person always rev
   - A rejection at any level rejects the request. Someone who approved an earlier level can't approve a group's level as well.
   - For a service account or an AI agent, the owner of what is requested approves where a level asks for a manager.
   - A change applies to new requests at once, as the workflow's next version; requests already waiting keep their approvers. A workflow a policy uses can't be retired.
-- **Changing a policy:** in an organization with two or more Tenant Administrators, a change to a request policy waits, showing each field's old and new value, until someone else who manages access approves it (Request policies → Waiting for approval). Approved, it applies as the policy's next version; rejected, nothing changes. With one administrator a change applies at once. Every applied change is kept as a numbered version.
+- **Changing a policy:** in an organization with two or more Tenant Administrators, a change to a request policy waits, showing each field's old and new value, until someone else who manages access approves it (Request policies → Waiting for approval, one row per change in the form's words). A Tenant Administrator may approve their own change by giving a reason; it is recorded as self-approved. Nobody rejects their own change. Approved, it applies as the policy's next version; rejected, nothing changes. With one administrator a change applies at once. Every applied change is kept as a numbered version.
 - Approvers get a message with a link straight to the request when it reaches them.
 - **The requests list:** each line starts with its request number and the date, and the number opens the request. A waiting request says whom it is waiting on: the person by name, any member of a group, or an access manager.
 - **My requests** lists the requests you raised and those someone raised for you (marked "For you").
@@ -709,6 +709,7 @@ Newest first.
 
 | Date | What changed |
 |---|---|
+| 21 Oct 2026 | Entitlements lists one column per attribute (type, application, risk, privilege, requestable, SOX, status, data); each name opens its application's Entitlements tab, where it is edited. Waiting request-policy changes show as one row each, in plain words, and a Tenant Administrator may approve their own with a reason. An identity's Audit history is its last tab. |
 | 21 Oct 2026 | An identity's page has an Audit history tab: the latest 100 changes to the identity, its sign-in, its accounts and the access requests for it, in plain words, with who made each change and when. |
 | 21 Oct 2026 | Careers: open positions on the home page and at `/careers`, with an application form. Jobs, applications and every email are run by WonderJobs; the vendor console has a Careers page. |
 | 21 Oct 2026 | Usage limits against automated copying: per person, 60 help-assistant questions, 60 AI summaries and 30 CSV exports an hour. Only the public home page may be indexed by search engines, and AI crawlers are asked to stay away. |

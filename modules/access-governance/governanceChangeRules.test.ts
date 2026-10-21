@@ -20,6 +20,11 @@ describe("approved governance changes (ACCESS-P0-35)", () => {
     expect(decisionRefusal({ ...change, status: "approved" }, "u2", "approved")?.code).toBe("INVALID_TRANSITION");
     expect(decisionRefusal(change, "u2", "maybe")?.code).toBe("VALIDATION_FAILED");
     expect(decisionRefusal(change, "u2", "rejected")).toBeNull();
+    // Owner decision 2026-10-21: a Tenant Administrator may approve their own change, with a note; never reject it, and nobody else may.
+    expect(decisionRefusal(change, "u1", "approved", { actorIsAdmin: true, note: "Only administrator today" })).toBeNull();
+    expect(decisionRefusal(change, "u1", "approved", { actorIsAdmin: true, note: "  " })?.code).toBe("VALIDATION_FAILED");
+    expect(decisionRefusal(change, "u1", "rejected", { actorIsAdmin: true, note: "x" })?.code).toBe("SELF_APPROVAL");
+    expect(decisionRefusal(change, "u1", "approved", { actorIsAdmin: false, note: "x" })?.code).toBe("SELF_APPROVAL");
   });
 
   it("is stale once the object moved on", () => {

@@ -58,20 +58,22 @@ export async function listGovernanceChanges(tenantId: string, opts: { status?: s
 }
 
 /** Approve (apply) or reject a waiting change; never the proposer's own. */
-export async function decideGovernanceChange(tenantId: string, actorId: string, changeId: string, decision: unknown, note?: unknown): Promise<GovernanceChange> {
+export async function decideGovernanceChange(tenantId: string, actorId: string, changeId: string, decision: unknown, note?: unknown, actorIsAdmin = false): Promise<GovernanceChange> {
   if (!UUID_RE.test(changeId)) throw new ApiError(404, "NOT_FOUND", "No such change");
   const admin = supabaseServiceRole();
   const { data: row, error } = await admin.from("governance_changes").select("*").eq("tenant_id", tenantId).eq("id", changeId).maybeSingle();
   if (error) throw new ApiError(500, "QUERY_FAILED", error.message);
   if (!row || row.tenant_id !== tenantId) throw new ApiError(404, "NOT_FOUND", "No such change");
-  const refusal = decisionRefusal({ status: row.status as string, requestedBy: row.requested_by as string }, actorId, decision);
-  if (refusal) throw new ApiError(refusal.status, refusal.code, refusal.message);
   const decisionNote = typeof note === "string" && note.trim() ? note.trim().slice(0, 1000) : null;
+  const refusal = decisionRefusal({ status: row.status as string, requestedBy: row.requested_by as string }, actorId, decision, { actorIsAdmin, note: decisionNote });
+  if (refusal) throw new ApiError(refusal.status, refusal.code, refusal.message);
+  // Owner decision 2026-10-21: an administrator's own change, approved with a note, is marked as such (the database allows it only then).
+  const selfApproved = decision === "approved" && row.requested_by === actorId;
 
   // Claim it first, so two people deciding at once cannot both act.
   const { data: claimed, error: claimError } = await admin
     .from("governance_changes")
-    .update({ status: decision, decided_by: actorId, decided_at: new Date().toISOString(), decision_note: decisionNote })
+    .update({ status: decision, decided_by: actorId, decided_at: new Date().toISOString(), decision_note: decisionNote, self_approved: selfApproved })
     .eq("tenant_id", tenantId)
     .eq("id", changeId)
     .eq("status", "pending")
@@ -92,7 +94,7 @@ export async function decideGovernanceChange(tenantId: string, actorId: string, 
       if (!row.object_id) await admin.from("governance_changes").update({ object_id: policy.id }).eq("tenant_id", tenantId).eq("id", changeId);
     } catch (err) {
       // Not applied: it waits again, and the reason is the answer.
-      await admin.from("governance_changes").update({ status: "pending", decided_by: null, decided_at: null, decision_note: null }).eq("tenant_id", tenantId).eq("id", changeId);
+      await admin.from("governance_changes").update({ status: "pending", decided_by: null, decided_at: null, decision_note: null, self_approved: false }).eq("tenant_id", tenantId).eq("id", changeId);
       throw err;
     }
   }
@@ -104,7 +106,7 @@ export async function decideGovernanceChange(tenantId: string, actorId: string, 
     objectType: "governance_change",
     objectId: changeId,
     outcome: "success",
-    metadata: { objectType: row.object_type, objectId: row.object_id, requestedBy: row.requested_by },
+    metadata: { objectType: row.object_type, objectId: row.object_id, requestedBy: row.requested_by, ...(selfApproved ? { selfApproved: true } : {}) },
     typedText: { note: decisionNote },
   });
   const { data: final } = await admin.from("governance_changes").select("*").eq("tenant_id", tenantId).eq("id", changeId).single();

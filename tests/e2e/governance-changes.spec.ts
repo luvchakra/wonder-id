@@ -30,7 +30,7 @@ async function otherAdmin(browser: Browser) {
 test.describe.serial("approved request policy changes", () => {
   test.use({ storageState: authFile("adminTwo") });
 
-  test("a change waits for another administrator, who cannot be its proposer", async ({ request, page }) => {
+  test("a change waits for another administrator; its proposer, an administrator, may approve it only with a note", async ({ request, page }) => {
     tenantTwoId = await getTenantIdBySlug(TENANT_TWO.slug);
     const app = await request.post("/api/v1/access/applications", { data: { name: `E2E Four Eyes App ${stamp}`, appType: "saas", riskLevel: "low", dataClassification: "internal" } });
     expect(app.status(), await app.text()).toBe(201);
@@ -49,13 +49,17 @@ test.describe.serial("approved request policy changes", () => {
     expect(again.status()).toBe(409);
     expect((await again.json()).error.code).toBe("CHANGE_PENDING");
 
+    // Owner decision 2026-10-21: an administrator may approve their own change only with a note, and never reject it.
     const own = await request.post(`/api/v1/access/governance-changes/${changeId}/decision`, { data: { decision: "approved" } });
-    expect(own.status()).toBe(409);
-    expect((await own.json()).error.code).toBe("SELF_APPROVAL");
+    expect(own.status()).toBe(400);
+    expect((await own.json()).error.code).toBe("VALIDATION_FAILED");
+    const ownReject = await request.post(`/api/v1/access/governance-changes/${changeId}/decision`, { data: { decision: "rejected", note: "No" } });
+    expect(ownReject.status()).toBe(409);
+    expect((await ownReject.json()).error.code).toBe("SELF_APPROVAL");
 
     await page.goto("/access/request-policies");
     await expect(page.getByRole("heading", { name: "Waiting for approval" })).toBeVisible();
-    await expect(page.getByText("Waiting for another administrator").first()).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Why you approve your own change" }).first()).toBeVisible();
   });
 
   test("approved by the other administrator, it applies as version 1; a rejected change leaves it as it was", async ({ request, browser }) => {

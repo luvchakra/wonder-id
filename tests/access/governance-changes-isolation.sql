@@ -42,6 +42,15 @@ begin
     update governance_changes set status = 'approved', decided_by = x, decided_at = now() where id = ch;
     results := results || E'\ndecided by its proposer (expect denied): ALLOWED';
   exception when others then results := results || E'\ndecided by its proposer (expect denied): denied ' || sqlstate; end;
+  -- 0211 (owner decision 2026-10-21): only a self-approval marked as such, with a note, passes.
+  begin
+    update governance_changes set status = 'rejected', decided_by = x, decided_at = now(), self_approved = true, decision_note = 'mine' where id = ch;
+    results := results || E'\nself-marked rejection by its proposer (expect denied): ALLOWED';
+  exception when others then results := results || E'\nself-marked rejection by its proposer (expect denied): denied ' || sqlstate; end;
+  begin
+    update governance_changes set status = 'approved', decided_by = x, decided_at = now(), self_approved = true, decision_note = null where id = ch;
+    results := results || E'\nself-approval without a note (expect denied): ALLOWED';
+  exception when others then results := results || E'\nself-approval without a note (expect denied): denied ' || sqlstate; end;
 
   execute 'set local role authenticated';
   perform set_config('request.jwt.claims', json_build_object('sub', x, 'role', 'authenticated')::text, true);
