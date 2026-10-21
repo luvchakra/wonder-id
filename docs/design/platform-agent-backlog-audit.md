@@ -1441,3 +1441,39 @@ section where a platform administrator posts jobs, ticks "On WonderID
 careers" and handles applications. It reads EA's `modules/careers`; no table,
 no tenant data, behind the console's platform-admin layout (#3). Verified with
 the Experience entry's checks.
+
+## 2026-10-21 — Careers: the WonderJobs key is set in the console (owner request)
+
+Owner request: the career-site key needed a Vercel environment variable and a
+deployment; set it in WonderID itself instead.
+
+- Migration 0210 (applied to the project, additive): `platform_careers_connection`,
+  one row (`id = true`): the key encrypted with `encryptSecret` (AES-256-GCM),
+  its last four characters, an optional WonderJobs address, provenance columns
+  and the `record_provenance` trigger. RLS on, no client policy, `anon` and
+  `authenticated` revoked; listed in `tests/architecture/tenant-rls.test.ts`
+  and `lib/provenance/tables.ts`. Vendor setting, no `tenant_id`.
+- `modules/platform-admin/careersConnection.ts`, published through
+  `./service`: `getCareersConnection` (source console / environment / none
+  and the key hint, never the key), `saveCareersConnection`,
+  `removeCareersConnection` (both platform-audited, `careers.connection_saved`
+  / `careers.connection_removed`, with key hints only), and
+  `resolveCareersCredentials` (per request, React `cache()`), which the
+  careers client reads: the console's key, else `WONDERJOBS_CAREERS_KEY`.
+  An unreadable store falls back to the environment, logged.
+- `app/actions/platformCareers.ts`: `requirePlatformAdmin()`, key format
+  check, then `checkCareersKey` asks WonderJobs for that site's jobs; only an
+  accepted key is saved (rejected, unreachable or a non-wonderapps.biz address
+  is refused with a plain reason). After a change the careers cache is
+  cleared (`revalidateTag("careers")`, `/careers`, the landing page), so the
+  new key applies on the next visit.
+- `/platform-admin/careers`: "WonderJobs connection" card with its state,
+  where the key comes from, a password field (Save and connect), the
+  WonderJobs address folded, and Remove saved key.
+
+Verified: `npx vitest run modules/careers app/actions/platformCareers.test.ts
+lib/provenance tests/architecture proxy.test.ts` (all passed), eslint clean,
+typecheck clean apart from the known `app/welcome` image errors, Supabase
+security advisor after the migration (only the expected "RLS enabled, no
+policy" info for the new vendor table). The console page needs a platform
+administrator session, so it was not opened locally.

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { resolveCareersCredentials } from "@/modules/platform-admin/service";
+
 /**
  * WonderID's careers page is powered by WonderJobs (owner request, 2026-10-21): a platform administrator posts
  * jobs in WonderJobs' Hiring workspace and ticks "On WonderID careers"; this page lists them, takes applications
@@ -7,8 +9,9 @@ import "server-only";
  *
  * This is WonderID's own vendor provider, like the email and AI providers, never an organization's data
  * (non-negotiable #20; allowlisted in tests/architecture/connector-boundary.test.ts with the owner's request).
- * Only this server calls WonderJobs: the career-site key (`WONDERJOBS_CAREERS_KEY`) never reaches a browser
- * (#10). The host is fixed (https, *.wonderapps.biz), every call has a timeout, and only reads are retried.
+ * Only this server calls WonderJobs: the career-site key never reaches a browser (#10). A platform
+ * administrator sets it in the vendor console (/platform-admin/careers, stored encrypted); the
+ * `WONDERJOBS_CAREERS_KEY` environment variable is the fallback. The host is fixed (https, *.wonderapps.biz), every call has a timeout, and only reads are retried.
  */
 
 export type CareerJob = {
@@ -54,8 +57,8 @@ const DEFAULT_BASE = "https://jobs.wonderapps.biz";
 const TIMEOUT_MS = 8_000;
 
 /** WonderJobs' address, only ever an https *.wonderapps.biz host (or localhost in development). */
-export function careersBase(env: Record<string, string | undefined> = process.env): string | null {
-  const raw = (env.WONDERJOBS_CAREERS_URL || DEFAULT_BASE).trim().replace(/\/+$/, "");
+export function careersBase(env: Record<string, string | undefined> = process.env, url?: string | null): string | null {
+  const raw = (url || env.WONDERJOBS_CAREERS_URL || DEFAULT_BASE).trim().replace(/\/+$/, "");
   try {
     const u = new URL(raw);
     const dev = env.NODE_ENV !== "production" && u.protocol === "http:" && u.hostname === "localhost";
@@ -66,23 +69,39 @@ export function careersBase(env: Record<string, string | undefined> = process.en
   }
 }
 
-function config(): { base: string; key: string } | null {
-  const key = process.env.WONDERJOBS_CAREERS_KEY?.trim();
-  const base = careersBase();
+async function config(): Promise<{ base: string; key: string } | null> {
+  const { key, baseUrl } = await resolveCareersCredentials();
+  const base = careersBase(process.env, baseUrl);
   return key && base ? { base, key } : null;
 }
 
 /** Where a platform administrator manages WonderID's jobs and applications. */
-export function hiringConsoleUrl(): string {
-  return `${careersBase() ?? DEFAULT_BASE}/app/hiring?tab=jobs`;
+export async function hiringConsoleUrl(): Promise<string> {
+  const { baseUrl } = await resolveCareersCredentials();
+  return `${careersBase(process.env, baseUrl) ?? DEFAULT_BASE}/app/hiring?tab=jobs`;
 }
 
-export function careersConfigured(): boolean {
-  return config() !== null;
+/**
+ * Checks a key before it is saved: asks WonderJobs for that site's jobs. "ok" with the
+ * site's name and how many positions are live; "rejected" when WonderJobs refuses the key.
+ */
+export async function checkCareersKey(key: string, baseUrl: string | null): Promise<{ state: "ok"; site: string; jobs: number } | { state: "rejected" } | { state: "unavailable" } | { state: "bad_address" }> {
+  const base = careersBase(process.env, baseUrl);
+  if (!base) return { state: "bad_address" };
+  try {
+    const res = await fetch(`${base}/api/careers/v1/jobs`, { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(TIMEOUT_MS), cache: "no-store" });
+    if (res.status === 401) return { state: "rejected" };
+    if (!res.ok) return { state: "unavailable" };
+    const json = (await res.json().catch(() => ({}))) as { site?: { name?: string }; jobs?: unknown[] };
+    return { state: "ok", site: json.site?.name ?? "career site", jobs: Array.isArray(json.jobs) ? json.jobs.length : 0 };
+  } catch (err) {
+    console.error("careers: key check could not reach WonderJobs:", err instanceof Error ? err.name : "error");
+    return { state: "unavailable" };
+  }
 }
 
 async function call<T>(path: string, init: { method?: "GET" | "POST"; body?: unknown; revalidate?: number } = {}): Promise<Result<T>> {
-  const cfg = config();
+  const cfg = await config();
   if (!cfg) return { state: "needs_setup" };
   const method = init.method ?? "GET";
   const attempts = method === "GET" ? 2 : 1;

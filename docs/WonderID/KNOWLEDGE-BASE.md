@@ -188,6 +188,7 @@ All information from your systems reaches WonderID through **connections**. Ther
 
 | Kind of system | Built-in types |
 |---|---|
+| 21 Oct 2026 | Vendor console › Careers: the WonderJobs key for the careers page is pasted and checked there, saved encrypted, and works at once without a deployment. |
 | HR | Frappe HR |
 | Directories and identity providers | Active Directory (people, accounts, managed service accounts, groups; can also add and remove group members), LDAP directory (which can also add and remove group members), Keycloak, Saviynt, and any identity provider or HR system that pushes people over SCIM 2.0 |
 | Applications | ERPNext, Gitea, Mattermost, Nextcloud, Zendesk, and any application with a SCIM 2.0 service (which can also add and remove group members, disable and create users) |
@@ -664,7 +665,7 @@ These pages are for the WonderID service operator only, never for customers:
 - **Platform branding and health.**
 - **Billing and refunds.**
 - **Platform audit trail.**
-- **Careers:** WonderID's open positions, shown on the home page and at `/careers`. They are posted in WonderJobs' Hiring section, where the operator ticks "On WonderID careers" for each job. Anyone can open a position and apply (name, email, phone, location, résumé link, LinkedIn and a note). WonderJobs stores the application, emails the applicant a confirmation with a link to see their status or withdraw, emails the hiring team, reminds them after two days without a decision, and emails the applicant at every step (review, interview, offer, hired, not moving forward). The Careers page in the vendor console shows whether the link works and what is live.
+- **Careers:** WonderID's open positions, shown on the home page and at `/careers`. They are posted in WonderJobs' Hiring section, where the operator ticks "On WonderID careers" for each job. Anyone can open a position and apply (name, email, phone, location, résumé link, LinkedIn and a note). WonderJobs stores the application, emails the applicant a confirmation with a link to see their status or withdraw, emails the hiring team, reminds them after two days without a decision, and emails the applicant at every step (review, interview, offer, hired, not moving forward). The Careers page in the vendor console connects the careers page to WonderJobs: paste the career site's key from WonderJobs, WonderID checks it with WonderJobs, saves it encrypted and uses it straight away (no deployment). It also shows what is live.
 
 ---
 
