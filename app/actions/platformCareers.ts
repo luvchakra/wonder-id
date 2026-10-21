@@ -51,3 +51,9 @@ export async function removeCareersConnectionAction(): Promise<CareersConnection
   refreshCareers();
   return { ok: true, message: "Key removed." };
 }
+
+/** Re-reads WonderJobs now instead of within five minutes (after posting or linking jobs there). */
+export async function refreshCareersAction(): Promise<void> {
+  await requirePlatformAdmin();
+  refreshCareers();
+}

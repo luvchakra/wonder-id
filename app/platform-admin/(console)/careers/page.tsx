@@ -2,9 +2,10 @@ import { ExternalLink } from "lucide-react";
 import { hiringConsoleUrl, listCareerJobs } from "@/modules/careers/wonderjobs";
 import { jobFacts } from "@/modules/careers/format";
 import { getCareersConnection } from "@/modules/platform-admin/service";
-import { Card, CardBody, CardHeader, LinkButton, StatusBadge } from "@/modules/ui";
+import { Card, CardBody, CardHeader, LinkButton, PendingSubmitButton, StatusBadge } from "@/modules/ui";
 import { PageHeading } from "@/app/platform-admin/PageHeading";
 import { ConnectionForm } from "./ConnectionForm";
+import { refreshCareersAction } from "@/app/actions/platformCareers";
 
 // See app/platform-admin/page.tsx for why this is forced.
 export const dynamic = "force-dynamic";
@@ -38,11 +39,21 @@ export default async function PlatformCareersPage() {
       <Card>
         <CardHeader title="WonderJobs connection" description={source} actions={badge} />
         <CardBody>
-          <ConnectionForm hasSavedKey={connection?.source === "console"} baseUrl={connection?.source === "console" ? connection.baseUrl : null} />
+          <ConnectionForm keyHint={connection?.keyHint ?? null} source={connection?.source ?? "none"} baseUrl={connection?.source === "console" ? connection.baseUrl : null} />
         </CardBody>
       </Card>
       <Card>
-        <CardHeader title="Live positions" description="What visitors see now (re-read every five minutes)." />
+        <CardHeader
+          title="Live positions"
+          description="What visitors see now. WonderJobs is re-read every five minutes, or now with Refresh."
+          actions={
+            <form action={refreshCareersAction}>
+              <PendingSubmitButton variant="outline" size="sm" pendingLabel="Refreshing…">
+                Refresh now
+              </PendingSubmitButton>
+            </form>
+          }
+        />
         <CardBody>
           {jobs.state === "needs_setup" ? (
             <p className="text-sm text-muted-foreground">Connect WonderJobs above to show positions.</p>
