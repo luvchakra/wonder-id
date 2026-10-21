@@ -52,7 +52,7 @@ vi.mock("./smtpSettings", () => ({ resolveTenantSmtp: (tenantId: string) => mock
 const mockSendSmtpMail = vi.fn();
 vi.mock("@/modules/integrations/service", () => ({ sendSmtpMail: (...args: unknown[]) => mockSendSmtpMail(...args) }));
 
-import { sendNotificationEmail, sendTenantEmail } from "./email";
+import { sendNotificationEmail, sendTenantEmail, tenantEmailSender } from "./email";
 
 describe("sendNotificationEmail — OPERATIONS-P0-02.1 (Resend)", () => {
   const originalFetch = global.fetch;
@@ -214,5 +214,16 @@ describe("sendNotificationEmail — OPERATIONS-P0-02.1 (Resend)", () => {
 
     await expect(sendTenantEmail("tenant-1", { to: "a@b.example", subject: "s", text: "t" })).resolves.toBe(false);
     expect(mockSendSmtpMail).not.toHaveBeenCalled();
+  });
+
+  it("tenantEmailSender is null when nothing is configured, so a caller can skip preparing the message", async () => {
+    mockGetResendApiKey.mockReturnValue(null);
+    mockGetResendFromEmail.mockReturnValue(null);
+    await expect(tenantEmailSender("tenant-1")).resolves.toBeNull();
+
+    mockResolveTenantSmtp.mockResolvedValue({ server: { host: "smtp.example.com", port: 587, security: "starttls", username: null, password: null }, from: "it@acme.example" });
+    mockSendSmtpMail.mockResolvedValue(undefined);
+    const send = await tenantEmailSender("tenant-1");
+    await expect(send!({ to: "a@b.example", subject: "s", text: "t" })).resolves.toBe(true);
   });
 });

@@ -249,6 +249,7 @@ test.describe.serial("reviews of WonderID role assignments", () => {
     await expect(row.getByRole("button", { name: "Launch" })).toBeVisible();
     await page.getByRole("button", { name: "Actions", exact: true }).click();
     await page.getByRole("menuitem", { name: "Launch campaign…" }).click();
+    await page.getByRole("radio", { name: /^Custom/ }).check();
     await page.getByRole("combobox", { name: "Scope type" }).first().selectOption("role_assignments");
     await page.getByRole("button", { name: "Preview" }).first().click();
     await expect(page.getByRole("status").filter({ hasText: /items? for/ }).first()).toBeVisible();

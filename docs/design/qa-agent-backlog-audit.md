@@ -2658,3 +2658,44 @@ value and must never be readable in a browser bundle (owner request,
 AI reverse-engineering hardening; Foundation audit log, same date). No
 violations today; checked that it fails when a client form imports
 `modules/risk/signals.ts`.
+
+## 2026-10-21 — Nightly E2E of 21 Oct: parts 2 to 4 red, three causes
+
+The nightly run of 21 Oct (on #267; #268 merged after it, so it is not a
+cause) failed in parts 2, 3 and 4. Read from the Vercel build logs and the
+Supabase logs:
+
+1. **Campaign form tests (part 3: 7 failed; part 2: 1 interrupted).**
+   COMPLIANCE-P0-15 (#267) made Create Campaigns start from a campaign type,
+   with "User manager" chosen; "Scope type" is shown only for "Custom". The
+   tests that picked a scope type waited for a field that was not there,
+   60 s and a retry each (about 15 minutes of the parts' budget).
+   `compliance.spec.ts` and `role-reviews.spec.ts` now choose "Custom" first.
+2. **Bulk invitation slowed past its 240 s wait (part 4).** Since #256 every
+   invitation generated a password-reset link (an Auth write) before asking
+   whether the organization can send e-mail at all; neither the E2E
+   environment nor production has e-mail configured, so 42 rows meant 42
+   wasted Auth writes. `sendInvitationEmail()` now asks
+   `tenantEmailSender()` (new, `modules/operations/email.ts`) first and
+   generates the link only when a message will be sent, as before #256.
+   The same window's Supabase logs show 52 `auth.users` deletions at the
+   10 s deadline and `my_access_context()` statement timeouts (01:50 and
+   01:55 UTC), which is when part 4's other failures (file import, policy
+   publish, agent registration, all time-outs) happened.
+3. **Part 2 cut off at 35 minutes** (148 passed, 6 not run). Part 1 ran
+   connector-provisioning alone in about 22 minutes, so access-packages
+   (about 6 minutes) moves from part 2 to part 1. The slow specs now have
+   explicit parts in `scripts/e2e-on-vercel.sh`; every other assignment is
+   unchanged.
+
+Seen but not changed here: `cookies()`/`headers()` used inside `after()`
+while rendering on `/access/applications/[id]`, `/identities/[id]` and
+`/integrations/[id]` (logged by Next as errors; no test failed on it).
+
+Checks: `npx vitest run modules/operations/email.test.ts` (10 passed, one
+new), eslint on the changed files, typecheck (only the pre-existing
+missing `@/assets/product/*.png` declarations in this container). An
+on-demand Vercel run of the six affected specs checked out `main`, not this
+branch (`e2e.yml` always does), so it is a baseline: on `main` the same 8
+campaign tests and the bulk invitation failed again in isolation (27
+passed, 9 failed). The fix itself is first checked by the next nightly.
