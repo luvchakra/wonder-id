@@ -1,7 +1,7 @@
 import "server-only";
 
 import { supabaseServiceRole } from "@/lib/db/supabaseServer";
-import { sendTenantEmail } from "@/modules/operations/service";
+import { tenantEmailSender } from "@/modules/operations/service";
 import { writeAudit } from "@/lib/audit/writeAudit";
 import { listAssignableRoles } from "@/lib/rbac/roles";
 import { ApiError } from "@/lib/shared/types/foundation";
@@ -430,6 +430,10 @@ export async function inviteUser(
 async function sendInvitationEmail(v: ValidInvite, tenant: { tenantId: string; name: string; url: string | null }, actor: { email: string | null }): Promise<boolean> {
   if (!tenant.url) return false;
   try {
+    // No e-mail configured: no sign-in link either. Generating one is an Auth
+    // write, and a bulk invitation makes one per person (nightly E2E, 2026-10-21).
+    const send = await tenantEmailSender(tenant.tenantId);
+    if (!send) return false;
     const { data, error } = await supabaseServiceRole().auth.admin.generateLink({
       type: "recovery",
       email: v.email,
@@ -437,7 +441,7 @@ async function sendInvitationEmail(v: ValidInvite, tenant: { tenantId: string; n
     });
     const link = data?.properties?.action_link;
     if (error || !link) return false;
-    return await sendTenantEmail(tenant.tenantId, {
+    return await send({
       to: v.email,
       subject: `You have been invited to ${tenant.name} on WonderID`,
       text:

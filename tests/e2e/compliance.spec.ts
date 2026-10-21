@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { authFile } from "./support/testUsers";
 
 // COMPLIANCE-P0-01.2's 5 scope types all have real population logic, but
-// the campaign-launch FORM only ever sends `scope: {criticality: [...]}}`
+// the campaign-launch FORM's "Custom" type only ever sends `scope: {criticality: [...]}}`
 // or `{}` (app/actions/compliance.ts) — it has no `applicationId`/
 // `entitlementId` inputs (deliberately left API-level-only; see that
 // story's backlog notes). So launching via THIS form with "application"/
@@ -38,6 +38,7 @@ test.describe("Compliance module", () => {
     await page.goto("/compliance/campaigns");
     await page.getByRole("button", { name: "Actions", exact: true }).click();
     await page.getByRole("menuitem", { name: "Launch campaign…" }).click();
+    await page.getByRole("radio", { name: /^Custom/ }).check();
     await page.getByLabel("Campaign name").fill(campaignName);
     await page.getByRole("button", { name: "Launch", exact: true }).click();
 
@@ -62,6 +63,8 @@ test.describe("Compliance module", () => {
       await page.goto("/compliance/campaigns");
       await page.getByRole("button", { name: "Actions", exact: true }).click();
       await page.getByRole("menuitem", { name: "Launch campaign…" }).click();
+      // COMPLIANCE-P0-15: the scope types are the "Custom" campaign type's.
+      await page.getByRole("radio", { name: /^Custom/ }).check();
       await page.getByLabel("Campaign name").fill(`E2E ${scopeType} Campaign ${Date.now()}`);
       await page.getByLabel("Scope type").selectOption(scopeType);
       await page.getByRole("button", { name: "Launch", exact: true }).click();
@@ -76,6 +79,8 @@ test.describe("Compliance module", () => {
       await page.goto("/compliance/campaigns");
       await page.getByRole("button", { name: "Actions", exact: true }).click();
       await page.getByRole("menuitem", { name: "Launch campaign…" }).click();
+      // COMPLIANCE-P0-15: the scope types are the "Custom" campaign type's.
+      await page.getByRole("radio", { name: /^Custom/ }).check();
       await page.getByLabel("Campaign name").fill(`E2E ${scopeType} Campaign ${Date.now()}`);
       await page.getByLabel("Scope type").selectOption(scopeType);
       await page.getByRole("button", { name: "Launch", exact: true }).click();

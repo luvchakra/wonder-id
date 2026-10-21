@@ -41,12 +41,22 @@ export async function sendNotificationEmail(event: NotifyEvent): Promise<void> {
  * is "not sent", without an error.
  */
 export async function sendTenantEmail(tenantId: string, message: Message): Promise<boolean> {
+  const send = await tenantEmailSender(tenantId);
+  return send ? send(message) : false;
+}
+
+/**
+ * The organization's sender, or null when it has no e-mail configured, so a
+ * caller can skip preparing a message nobody will send (the invitation's
+ * sign-in link is an Auth write). Never throws.
+ */
+export async function tenantEmailSender(tenantId: string): Promise<((message: Message) => Promise<boolean>) | null> {
   try {
     const channel = await resolveChannel(tenantId);
-    return channel ? await deliver(channel, message, "email") : false;
+    return channel ? (message) => deliver(channel, message, "email") : null;
   } catch (err) {
     console.error("sendTenantEmail threw", { err: safeErrorMessage(err) });
-    return false;
+    return null;
   }
 }
 
