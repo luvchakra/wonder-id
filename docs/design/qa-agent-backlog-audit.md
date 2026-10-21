@@ -2694,5 +2694,8 @@ while rendering on `/access/applications/[id]`, `/identities/[id]` and
 
 Checks: `npx vitest run modules/operations/email.test.ts` (10 passed, one
 new), eslint on the changed files, typecheck (only the pre-existing
-missing `@/assets/product/*.png` declarations in this container). The
-affected specs were run on Vercel before the merge (result in the PR).
+missing `@/assets/product/*.png` declarations in this container). An
+on-demand Vercel run of the six affected specs checked out `main`, not this
+branch (`e2e.yml` always does), so it is a baseline: on `main` the same 8
+campaign tests and the bulk invitation failed again in isolation (27
+passed, 9 failed). The fix itself is first checked by the next nightly.
